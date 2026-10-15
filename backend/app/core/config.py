@@ -65,10 +65,18 @@ class Settings(BaseSettings):
         description="Default Gemini model for agent analysis",
     )
 
-    # Document Processing Limits
+    # Document Storage & Ingestion Limits
+    upload_dir: str = Field(
+        default="data/uploads",
+        description="Secure storage directory for uploaded raw contract files",
+    )
+    storage_backend: str = Field(
+        default="local",
+        description="Storage provider ('local' or 's3')",
+    )
     max_upload_size_mb: int = Field(default=25, description="Max upload file size in megabytes")
     allowed_extensions: list[str] = Field(
-        default=["pdf", "docx", "txt"],
+        default=["pdf", "docx"],
         description="Allowed contract file extensions",
     )
 

@@ -1,5 +1,9 @@
 import type {
   APIErrorResponse,
+  DocumentListResponse,
+  DocumentMetadataResponse,
+  DocumentTextResponse,
+  DocumentUploadResponse,
   LiveHealthResponse,
   ReadyHealthResponse,
   RootHealthResponse,
@@ -100,6 +104,34 @@ export class ContractGuardApiClient {
 
   public async getReadyHealth(): Promise<ReadyHealthResponse> {
     return this.request<ReadyHealthResponse>("/api/v1/health/ready");
+  }
+
+  public async uploadDocument(file: File): Promise<DocumentUploadResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return this.request<DocumentUploadResponse>("/api/v1/documents", {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  public async listDocuments(limit: number = 20, offset: number = 0): Promise<DocumentListResponse> {
+    return this.request<DocumentListResponse>(`/api/v1/documents?limit=${limit}&offset=${offset}`);
+  }
+
+  public async getDocument(id: string): Promise<DocumentMetadataResponse> {
+    return this.request<DocumentMetadataResponse>(`/api/v1/documents/${id}`);
+  }
+
+  public async getDocumentChunks(
+    id: string,
+    page: number = 1,
+    pageSize: number = 20
+  ): Promise<DocumentTextResponse> {
+    return this.request<DocumentTextResponse>(
+      `/api/v1/documents/${id}/chunks?page=${page}&page_size=${pageSize}`
+    );
   }
 }
 

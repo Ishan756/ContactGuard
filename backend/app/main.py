@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestContextMiddleware
+from app.db.session import init_db
 from app.schemas.health import RootHealthResponse
 
 settings = get_settings()
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.version,
         settings.app_env,
     )
+    await init_db()
     yield
     logger.info("Shutting down %s", settings.app_name)
 

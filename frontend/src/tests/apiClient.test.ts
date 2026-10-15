@@ -65,4 +65,62 @@ describe("ContractGuardApiClient", () => {
       expect(apiErr.requestId).toBe("error-req-999");
     }
   });
+
+  it("uploads contract file with multipart form data", async () => {
+    const mockUploadResponse = {
+      document: {
+        id: "doc-123",
+        original_filename: "nda.pdf",
+        file_size_bytes: 1024,
+        mime_type: "application/pdf",
+        file_hash_sha256: "abc123hash",
+        status: "completed",
+        total_pages: 1,
+        total_characters: 500,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      chunks_extracted: 3,
+      message: "Uploaded successfully",
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "X-Request-ID": "upload-req-1" }),
+      json: async () => mockUploadResponse,
+    });
+
+    const file = new File(["dummy content"], "nda.pdf", { type: "application/pdf" });
+    const result = await client.uploadDocument(file);
+
+    expect(result.document.id).toBe("doc-123");
+    expect(result.chunks_extracted).toBe(3);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/documents",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.any(FormData),
+      })
+    );
+  });
+
+  it("lists documents with limit and offset query params", async () => {
+    const mockListResponse = {
+      documents: [],
+      total: 0,
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => mockListResponse,
+    });
+
+    const result = await client.listDocuments(10, 0);
+    expect(result.total).toBe(0);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/documents?limit=10&offset=0",
+      expect.anything()
+    );
+  });
 });

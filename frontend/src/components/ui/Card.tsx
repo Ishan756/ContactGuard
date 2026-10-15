@@ -7,6 +7,7 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   id?: string;
+  style?: React.CSSProperties;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -16,9 +17,10 @@ export const Card: React.FC<CardProps> = ({
   children,
   className = "",
   id,
+  style,
 }) => {
   return (
-    <div id={id} className={`glass-card ${className}`}>
+    <div id={id} className={`glass-card ${className}`} style={style}>
       {(title || action) && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
           <div>
