@@ -18,7 +18,7 @@ describe("ContractGuardApiClient", () => {
       timestamp: new Date().toISOString(),
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       headers: new Headers({ "X-Request-ID": "test-req-123" }),
       json: async () => mockResponse,
@@ -27,7 +27,7 @@ describe("ContractGuardApiClient", () => {
     const result = await client.getRootHealth();
     expect(result.status).toBe("ok");
     expect(result.service).toBe("ContractGuard");
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/health",
       expect.objectContaining({
         headers: expect.any(Headers),
@@ -46,7 +46,7 @@ describe("ContractGuardApiClient", () => {
       timestamp: new Date().toISOString(),
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 404,
       headers: new Headers({ "X-Request-ID": "error-req-999" }),

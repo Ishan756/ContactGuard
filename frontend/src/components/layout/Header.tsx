@@ -65,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({ title }) => {
             {isChecking
               ? "Checking API..."
               : liveStatus?.status === "ok"
-              ? `FastAPI Live (${liveStatus.uptime_seconds.toFixed(0)}s)`
+              ? `FastAPI Live (${liveStatus.uptime_seconds != null ? liveStatus.uptime_seconds.toFixed(0) : "0"}s)`
               : "API Disconnected"}
           </span>
         </div>
