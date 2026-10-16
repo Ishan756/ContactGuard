@@ -44,6 +44,12 @@
 - **Aesthetic**: Premium dark-slate interface with glassmorphism, glowing telemetry indicators, and clear typography.
 
 ### 2.3 Data & Storage Subsystems
-- **PostgreSQL**: Stores contract entities, clause metadata, multi-agent evaluation traces, audit trails, and user permissions.
-- **Qdrant**: High-performance vector database storing dense vector embeddings of contract clauses for fast similarity searches and precedent comparison.
-- **Gemini API Abstraction**: Clean provider interface allowing model swapping, prompt template management, and retry handling.
+- **PostgreSQL**: Stores contract entities, document metadata, policies (`policies`, `policy_chunks`), multi-agent evaluation traces, and audit trails.
+- **Qdrant**: High-performance vector database storing dense vector embeddings of policy chunks (`company_policies` collection) for sub-millisecond semantic retrieval against individual contract clauses.
+- **Embedding Provider Interface**: Pluggable interface (`EmbeddingProvider`) with Gemini API (`GeminiEmbeddingProvider` using `text-embedding-004`) and zero-cost deterministic mock provider (`DeterministicEmbeddingProvider`) for isolated testing.
+
+### 2.4 Policy Knowledge Base & Retrieval Subsystem
+- **Policy Ingestion (`/api/v1/policies`)**: Administrators upload policies via raw text or PDF/DOCX documents (reusing secure document ingestion). Documents are split into semantic chunks preserving source page numbers, headings, and character offsets.
+- **Vector Indexing & Collection Validation**: Automatically validates dimension compatibility against the active Qdrant collection (e.g. 768 dims for Gemini `text-embedding-004`). Ensures no mixed dimensions can corrupt index integrity.
+- **Stale Vector Cleanup**: When a policy is updated or deleted, all associated vector points are pruned from Qdrant by policy ID filter to prevent stale or orphaned contamination.
+- **Semantic Clause Retrieval (`/api/v1/policies/search`)**: Given an individual contract clause, retrieves matching policy passages ranked by cosine similarity with source citations, stable chunk IDs, and a factual confidence disclaimer distinguishing similarity from legal compliance certainty.

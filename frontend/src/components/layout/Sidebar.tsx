@@ -40,6 +40,16 @@ export const Sidebar: React.FC = () => {
           </li>
           <li>
             <NavLink
+              to="/policies"
+              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+              id="nav-policies"
+            >
+              <ShieldCheck size={18} />
+              <span>Policies</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink
               to="/health"
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
               id="nav-health"

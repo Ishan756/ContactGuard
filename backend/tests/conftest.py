@@ -3,6 +3,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.embeddings.factory import get_embedding_provider
+from app.core.embeddings.mock import DeterministicEmbeddingProvider
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import app
@@ -48,6 +50,7 @@ async def override_get_db():
 async def async_client():
     """Async test client using httpx ASGITransport with test database overrides."""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_embedding_provider] = lambda: DeterministicEmbeddingProvider(dimension=768)
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",

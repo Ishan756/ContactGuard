@@ -57,12 +57,42 @@ class Settings(BaseSettings):
         default="contract_clauses",
         description="Qdrant vector collection for contract clauses",
     )
+    qdrant_policy_collection: str = Field(
+        default="company_policies",
+        description="Qdrant vector collection for company policies",
+    )
 
-    # AI / LLM Provider (Gemini API)
+    # AI / LLM Provider & Embeddings
     gemini_api_key: str | None = Field(default=None, description="Google Gemini API Key")
     gemini_default_model: str = Field(
         default="gemini-1.5-pro",
         description="Default Gemini model for agent analysis",
+    )
+    embedding_provider: str = Field(
+        default="gemini",
+        description="Embedding provider ('gemini' or 'mock' / 'deterministic')",
+    )
+    embedding_model: str = Field(
+        default="text-embedding-004",
+        description="Model name used for vector embeddings",
+    )
+    embedding_dimension: int = Field(
+        default=768,
+        description="Vector embedding dimensions (768 for text-embedding-004)",
+    )
+
+    # Policy Chunking and Retrieval Limits
+    policy_chunk_size: int = Field(
+        default=500,
+        description="Target characters per policy chunk",
+    )
+    policy_chunk_overlap: int = Field(
+        default=100,
+        description="Character overlap between consecutive policy chunks",
+    )
+    policy_retrieval_limit: int = Field(
+        default=5,
+        description="Default maximum policy passages returned per query",
     )
 
     # Document Storage & Ingestion Limits
