@@ -109,6 +109,40 @@ class ServiceUnavailableError(AppException):
         )
 
 
+class ConfigurationError(AppException):
+    def __init__(self, message: str, details: Any | None = None) -> None:
+        super().__init__(
+            message=message,
+            code="CONFIGURATION_ERROR",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details=details,
+        )
+
+
+class ProviderTimeoutError(AppException):
+    def __init__(
+        self, message: str = "LLM provider timed out", details: Any | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="LLM_TIMEOUT",
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            details=details,
+        )
+
+
+class LLMResponseError(AppException):
+    def __init__(
+        self, message: str = "LLM returned an unprocessable response", details: Any | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="LLM_INVALID_RESPONSE",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            details=details,
+        )
+
+
 def build_error_payload(
     code: str,
     message: str,

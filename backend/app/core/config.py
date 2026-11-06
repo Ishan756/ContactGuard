@@ -81,6 +81,44 @@ class Settings(BaseSettings):
         description="Vector embedding dimensions (768 for text-embedding-004)",
     )
 
+    # LLM Provider Abstraction
+    llm_provider: str = Field(
+        default="gemini",
+        description="LLM provider for clause extraction ('gemini' or 'mock')",
+    )
+    llm_model: str | None = Field(
+        default=None,
+        description="LLM model name (defaults to GEMINI_DEFAULT_MODEL when unset)",
+    )
+    llm_timeout_seconds: float = Field(
+        default=45.0,
+        description="Per-request LLM timeout in seconds",
+    )
+    llm_max_retries: int = Field(
+        default=2,
+        description="Number of retries after the initial LLM request fails",
+    )
+    llm_max_output_tokens: int = Field(
+        default=8192,
+        description="Maximum output tokens requested from the LLM",
+    )
+
+    # Clause Extraction Chunking
+    clause_chunk_size: int = Field(
+        default=6000,
+        description="Target characters per clause extraction chunk",
+    )
+    clause_chunk_overlap: int = Field(
+        default=600,
+        description="Character overlap between consecutive clause extraction chunks",
+    )
+    clause_min_confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence below which an extracted clause is flagged for review",
+    )
+
     # Policy Chunking and Retrieval Limits
     policy_chunk_size: int = Field(
         default=500,
@@ -122,6 +160,11 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@"
             f"{self.postgres_server}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def resolved_llm_model(self) -> str:
+        """Effective model name for the configured LLM provider."""
+        return self.llm_model or self.gemini_default_model
 
 
 @lru_cache

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
+
 from qdrant_client import AsyncQdrantClient, models
+
 from app.core.config import Settings, get_settings
 from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger

@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -49,6 +49,18 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
+    )
+    extraction_runs: Mapped[list["ClauseExtractionRun"]] = relationship(
+        "ClauseExtractionRun",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="ClauseExtractionRun.created_at",
+    )
+    clauses: Mapped[list["Clause"]] = relationship(
+        "Clause",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="Clause.start_char_offset",
     )
 
 
@@ -149,3 +161,96 @@ class PolicyChunk(Base):
     )
 
     policy: Mapped["Policy"] = relationship("Policy", back_populates="chunks")
+
+
+class ExtractionRunStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class ClauseValidationStatus(StrEnum):
+    VALID = "valid"
+    NEEDS_REVIEW = "needs_review"
+
+
+class ClauseExtractionRun(Base):
+    __tablename__ = "clause_extraction_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=ExtractionRunStatus.RUNNING
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    candidates_received: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    clauses_persisted: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    duplicates_merged: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    candidates_rejected: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    warnings: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    document: Mapped["Document"] = relationship("Document", back_populates="extraction_runs")
+    clauses: Mapped[list["Clause"]] = relationship(
+        "Clause",
+        back_populates="extraction_run",
+        cascade="all, delete-orphan",
+        order_by="Clause.start_char_offset",
+    )
+
+
+class Clause(Base):
+    __tablename__ = "clauses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    extraction_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("clause_extraction_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    source_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section_heading: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    start_char_offset: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    end_char_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    validation_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=ClauseValidationStatus.VALID
+    )
+    validation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_chunk_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    document: Mapped["Document"] = relationship("Document", back_populates="clauses")
+    extraction_run: Mapped["ClauseExtractionRun"] = relationship(
+        "ClauseExtractionRun", back_populates="clauses"
+    )

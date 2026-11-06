@@ -1,11 +1,12 @@
 from functools import lru_cache
+
 from app.core.config import get_settings
 from app.core.embeddings.base import EmbeddingProvider
 from app.core.embeddings.gemini import GeminiEmbeddingProvider
 from app.core.embeddings.mock import DeterministicEmbeddingProvider
 
 
-@lru_cache()
+@lru_cache
 def get_embedding_provider() -> EmbeddingProvider:
     """Factory creating the configured embedding provider."""
     settings = get_settings()

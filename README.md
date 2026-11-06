@@ -161,6 +161,17 @@ npm run build
 
 ---
 
+## Clause Extraction Agent
+
+The first AI agent extracts validated, structured clauses from ingested contracts with
+exact source citations (page, section, character offsets), deterministic deduplication,
+and a typed category schema. It never assigns legal risk scores. See
+[docs/clause_extraction.md](docs/clause_extraction.md) for provider configuration
+(Gemini credentials or the explicitly enabled mock provider), API usage, and an example
+structured response.
+
+---
+
 ## Security & Engineering Safeguards
 - **Zero Committed Secrets**: Secrets are loaded exclusively via environment variables and `.env` (enforced via `.gitignore` and `pydantic-settings`).
 - **Distributed Request Tracing**: Every inbound request receives a unique `X-Request-ID`, which is propagated through log entries, database sessions, and response headers.
