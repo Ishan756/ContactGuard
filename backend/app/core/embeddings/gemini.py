@@ -1,5 +1,7 @@
 import asyncio
+
 from google import genai
+
 from app.core.config import get_settings
 from app.core.embeddings.base import EmbeddingProvider
 from app.core.errors import AppException, ServiceUnavailableError

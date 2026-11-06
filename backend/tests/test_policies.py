@@ -1,9 +1,9 @@
 import io
+
 import docx
-import fitz
-from httpx import AsyncClient
 import pytest
-from app.db.models import Policy
+from httpx import AsyncClient
+
 from app.services.vector.qdrant_service import QdrantVectorService, ScoredVectorMatch
 
 

@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 HEADING_REGEX = re.compile(
     r"^((ARTICLE|SECTION|CLAUSE|POLICY)\s+([0-9IVXLCDM]+|[A-Z])[\s.:-]|([0-9]{1,2}\.?\s+[A-Z][a-zA-Z\s]{2,60}))",

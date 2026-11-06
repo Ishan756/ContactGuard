@@ -1,4 +1,5 @@
 import uuid
+
 from fastapi import UploadFile
 from qdrant_client import models
 from sqlalchemy import delete, select
@@ -13,8 +14,8 @@ from app.db.models import DocumentChunk, Policy, PolicyChunk, PolicyStatus
 from app.schemas.policy import (
     PolicyCreateRequest,
     PolicySearchRequest,
-    PolicySearchResultItem,
     PolicySearchResponse,
+    PolicySearchResultItem,
     PolicyUpdateRequest,
 )
 from app.services.ingestion.service import DocumentIngestionService

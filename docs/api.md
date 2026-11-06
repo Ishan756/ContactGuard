@@ -167,6 +167,80 @@ All application and validation errors adhere to the following schema:
 
 ---
 
+## Clause Extraction Endpoints
+
+Extraction and legal risk assessment are separate stages. These endpoints only extract
+and validate clauses; they do not assign risk scores.
+
+### 1. Extract Clauses
+- **Endpoint**: `POST /api/v1/documents/{document_id}/extract-clauses`
+- **Description**: Runs the Clause Extraction Agent over bounded, overlapping document
+  chunks. Each candidate is validated against an exact verbatim source citation,
+  deduplicated deterministically, and persisted with the document and extraction run.
+- **Response**: `201 Created`
+```json
+{
+  "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+  "run": {
+    "run_id": "a4a2c3f8-a442-4233-a7e2-f25640d76631",
+    "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+    "status": "completed",
+    "provider": "gemini",
+    "model_name": "gemini-1.5-pro",
+    "total_chunks": 3,
+    "candidates_received": 14,
+    "clauses_persisted": 12,
+    "duplicates_merged": 2,
+    "candidates_rejected": 0,
+    "warnings": [],
+    "error_message": null,
+    "created_at": "2026-11-06T14:38:07Z",
+    "completed_at": "2026-11-06T14:38:12Z"
+  },
+  "clauses": [
+    {
+      "clause_id": "15c9a4aa-1f0d-5f54-9f7a-cd84d3a83992",
+      "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+      "extraction_run_id": "a4a2c3f8-a442-4233-a7e2-f25640d76631",
+      "category": "confidentiality",
+      "source_text": "Each party shall hold the other party's Confidential Information in strict confidence...",
+      "normalized_summary": "Mutual confidentiality obligation lasting five years.",
+      "page_number": 1,
+      "section_heading": "ARTICLE 1. CONFIDENTIALITY",
+      "start_char_offset": 0,
+      "end_char_offset": 162,
+      "confidence": 0.94,
+      "validation_status": "valid",
+      "validation_notes": null,
+      "source_chunk_ids": ["a1ea4bb8-48f1-42aa-990b-3ff151383b32"],
+      "created_at": "2026-11-06T14:38:12Z"
+    }
+  ]
+}
+```
+- **Provider configuration**: See [Clause Extraction Agent](clause_extraction.md). Missing
+  Gemini credentials return `CONFIGURATION_ERROR` (HTTP 503); timeouts return
+  `LLM_TIMEOUT` (HTTP 504).
+
+### 2. List Extracted Clauses
+- **Endpoint**: `GET /api/v1/documents/{document_id}/clauses`
+- **Query Parameters**:
+  - `category`: optional canonical category filter
+  - `extraction_run_id`: optional run filter
+  - `limit`: int (default: 100, max: 500)
+  - `offset`: int (default: 0)
+- **Response**: `200 OK` (`ClauseListResponse`)
+
+### 3. Get a Single Clause
+- **Endpoint**: `GET /api/v1/documents/{document_id}/clauses/{clause_id}`
+- **Response**: `200 OK` (`ClauseResponse`)
+
+### 4. List Extraction Runs
+- **Endpoint**: `GET /api/v1/documents/{document_id}/extraction-runs`
+- **Response**: `200 OK` (`ExtractionRunListResponse`)
+
+---
+
 ## Limitations of Text Extraction
 
 1. **Scanned & Image-Only Documents**:

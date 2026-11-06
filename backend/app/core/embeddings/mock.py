@@ -1,11 +1,12 @@
 import hashlib
 import math
+
 from app.core.embeddings.base import EmbeddingProvider
 
 
 class DeterministicEmbeddingProvider(EmbeddingProvider):
     """Deterministic, zero-cost embedding provider for hermetic testing and offline development.
-    
+
     Uses SHA-256 and periodic projections to create normalized, dimension-compliant float vectors.
     Semantic similarity between identical or overlapping tokens yields consistent cosine distances.
     """
@@ -28,7 +29,7 @@ class DeterministicEmbeddingProvider(EmbeddingProvider):
 
         vector = [0.0] * self._dimension
         words = text.lower().split()
-        
+
         # Token hash projection
         for w in words:
             h = int(hashlib.md5(w.encode("utf-8")).hexdigest(), 16)
