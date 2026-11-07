@@ -191,6 +191,25 @@ the validation lifecycle, severity settings, and annotated example findings.
 
 ---
 
+## LangGraph Workflow & Human Review
+
+The end-to-end review workflow is a durable LangGraph state machine:
+**Document → Clause Extraction → Policy Retrieval → Risk Analysis → Evidence Validation →
+conditional correction retry or Review Report → human review interrupt**.
+
+Workflow nodes call the existing domain services, enforce retry/step limits, and persist
+durable run IDs, statuses, timestamps, errors, reviewer decisions, and an append-only
+audit trail. PostgreSQL-compatible checkpointing uses `AsyncPostgresSaver` (with a local
+SQLite checkpointer for development/tests), initialized during application startup.
+Reviewers authenticate with `X-Reviewer-ID` and `X-Workflow-Key`, and only the workflow
+owner can inspect or resume it. Human approval is separate from automatic evidence
+verification and never executes legal or contractual actions.
+
+See [docs/workflow.md](docs/workflow.md) for the Mermaid graph, checkpoint configuration,
+API examples, idempotency, and human-review lifecycle.
+
+---
+
 ## Security & Engineering Safeguards
 - **Zero Committed Secrets**: Secrets are loaded exclusively via environment variables and `.env` (enforced via `.gitignore` and `pydantic-settings`).
 - **Distributed Request Tracing**: Every inbound request receives a unique `X-Request-ID`, which is propagated through log entries, database sessions, and response headers.

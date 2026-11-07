@@ -181,6 +181,29 @@ def _retry_target_for(category: ValidationErrorCategory) -> RetryTarget:
     return RetryTarget.NONE
 
 
+def _finding_error_categories(finding: RiskFinding) -> list[ValidationErrorCategory]:
+    categories: list[ValidationErrorCategory] = []
+    if not finding.validation_error_categories:
+        return categories
+    try:
+        raw = json.loads(finding.validation_error_categories)
+    except (TypeError, json.JSONDecodeError):
+        return categories
+    if not isinstance(raw, list):
+        return categories
+    for item in raw:
+        try:
+            categories.append(ValidationErrorCategory(str(item)))
+        except ValueError:
+            continue
+    return categories
+
+
+def retry_target_for_finding(finding: RiskFinding) -> RetryTarget:
+    """Expose the validator's deterministic retry routing for orchestration."""
+    return _overall_retry_target(_finding_error_categories(finding))
+
+
 def _overall_retry_target(
     categories: list[ValidationErrorCategory],
 ) -> RetryTarget:

@@ -21,7 +21,10 @@ dependencies = [
     "sqlalchemy>=2.0.35",
     "asyncpg>=0.29.0",
     "langgraph>=0.2.34",
+    "langgraph-checkpoint-postgres>=3.0.0",
+    "langgraph-checkpoint-sqlite>=3.0.0",
     "langchain-core>=0.3.10",
+    "psycopg[binary]>=3.2.0",
     "google-genai>=0.1.1",
 ]
 

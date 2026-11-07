@@ -385,6 +385,64 @@ severity configuration, and example findings.
 
 ---
 
+## LangGraph Workflow & Human Review Endpoints
+
+All workflow endpoints require `X-Reviewer-ID` and `X-Workflow-Key`. Only the reviewer
+who started a workflow may inspect results or resume it. Start and resume support the
+`Idempotency-Key` header. See [workflow.md](workflow.md) for the full state machine,
+Mermaid diagram, checkpoint lifecycle, and decision semantics.
+
+### 1. Start Workflow
+- **Endpoint**: `POST /api/v1/workflows`
+- **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`, optional `Idempotency-Key`
+- **Body**:
+```json
+{
+  "document_id": "document-uuid",
+  "enable_model_analysis": false,
+  "max_retries": 2,
+  "max_steps": 30
+}
+```
+- **Behavior**: Runs clause extraction, policy retrieval, risk analysis, and automatic
+evidence validation. Conditional edges rerun analysis/retrieval up to the configured
+retry limit. When findings exist, the graph persists an interrupt and returns
+`awaiting_review`; no legal or contractual action is executed.
+- **Response**: `201 Created` (`WorkflowRunResponse`)
+
+### 2. Inspect Workflow Status
+- **Endpoint**: `GET /api/v1/workflows/{workflow_id}`
+- **Response**: `200 OK` (`WorkflowRunResponse`) including status, current/interrupted
+node, step/retry/revision counts, review interrupt payload, events, and decisions.
+
+### 3. Retrieve Workflow Results
+- **Endpoint**: `GET /api/v1/workflows/{workflow_id}/results`
+- **Response**: `200 OK` (`WorkflowResultsResponse`) with the review report, persisted
+findings, validation summary, verification/review completion flags, and
+`legal_action_performed: false`.
+
+### 4. Resume Human Review
+- **Endpoint**: `POST /api/v1/workflows/{workflow_id}/resume`
+- **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`, optional `Idempotency-Key`
+- **Body**:
+```json
+{
+  "decision": "approve",
+  "finding_ids": ["optional-finding-id"],
+  "notes": "Reviewed the liability deviation.",
+  "revision_instructions": null,
+  "revision_target": "analysis",
+  "command_id": "optional-command-id"
+}
+```
+- **Decisions**: `approve`, `dismiss`, or `request_revision`. Revision requests require
+`revision_instructions` or `notes`, rerun analysis/retrieval, and then pause for review
+again. Decisions are append-only; prior decisions are never rewritten.
+- **Response**: `200 OK` (`WorkflowRunResponse`), typically `awaiting_review` after a
+revision or `completed` after approval/dismissal.
+
+---
+
 ## Limitations of Text Extraction
 
 1. **Scanned & Image-Only Documents**:
