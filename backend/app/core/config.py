@@ -184,6 +184,63 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Evidence Validation / Critic Agent
+    validation_enable: bool = Field(
+        default=True,
+        description="Automatically validate risk findings after analysis",
+    )
+    validation_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum bounded correction retries per finding",
+    )
+    validation_explanation_min_overlap: int = Field(
+        default=2,
+        ge=1,
+        description="Minimum meaningful citation tokens an explanation must share",
+    )
+    validation_duplicate_detection: bool = Field(
+        default=True,
+        description="Reject duplicate findings that share a deterministic fingerprint",
+    )
+
+    # LangGraph Workflow Orchestration & Human Review
+    workflow_review_api_key: str = Field(
+        default="dev-workflow-review-key",
+        description="API key required to start, inspect, or resume human review workflows",
+    )
+    workflow_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum automatic graph retries after validation corrections",
+    )
+    workflow_max_steps: int = Field(
+        default=30,
+        ge=5,
+        le=100,
+        description="Maximum graph node steps before the workflow fails safely",
+    )
+    workflow_max_revisions: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum human-requested revision cycles",
+    )
+    workflow_checkpoint_backend: str = Field(
+        default="auto",
+        description="Checkpoint backend: auto, postgres, sqlite, or memory",
+    )
+    workflow_checkpoint_database_url: str | None = Field(
+        default=None,
+        description="Optional PostgreSQL connection string for LangGraph checkpoints",
+    )
+    workflow_checkpoint_sqlite_path: str = Field(
+        default="data/langgraph_checkpoints.db",
+        description="SQLite checkpoint database path used for local development/tests",
+    )
+
     # Policy Chunking and Retrieval Limits
     policy_chunk_size: int = Field(
         default=500,

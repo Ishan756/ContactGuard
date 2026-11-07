@@ -26,6 +26,54 @@ class ReviewStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class ValidationStatus(StrEnum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    UNVERIFIED = "unverified"
+    NEEDS_REVIEW = "needs_review"
+    MISSING_EVIDENCE = "missing_evidence"
+    INCONCLUSIVE = "inconclusive"
+
+
+class ValidationErrorCategory(StrEnum):
+    MISSING_CONTRACT_QUOTE = "missing_contract_quote"
+    CONTRACT_QUOTE_NOT_FOUND = "contract_quote_not_found"
+    CONTRACT_SOURCE_MISSING = "contract_source_missing"
+    MISSING_POLICY_QUOTE = "missing_policy_quote"
+    POLICY_QUOTE_NOT_FOUND = "policy_quote_not_found"
+    POLICY_SOURCE_MISMATCH = "policy_source_mismatch"
+    POLICY_SOURCE_NOT_IN_RETRIEVAL = "policy_source_not_in_retrieval"
+    DOCUMENT_ID_MISMATCH = "document_id_mismatch"
+    CLAUSE_ID_MISMATCH = "clause_id_mismatch"
+    RETRIEVAL_RUN_MISMATCH = "retrieval_run_mismatch"
+    RETRIEVAL_EVIDENCE_MISSING = "retrieval_evidence_missing"
+    POLICY_ID_MISMATCH = "policy_id_mismatch"
+    POLICY_VERSION_MISMATCH = "policy_version_mismatch"
+    PAGE_NUMBER_MISMATCH = "page_number_mismatch"
+    UNSUPPORTED_EXPLANATION = "unsupported_explanation"
+    SEVERITY_MISMATCH = "severity_mismatch"
+    MALFORMED_CITATION = "malformed_citation"
+    FINDING_CONTRADICTED_BY_DOCUMENT = "finding_contradicted_by_document"
+    EVIDENCE_PRESENT = "evidence_present"
+    MISSING_EVIDENCE = "missing_evidence"
+    INCONCLUSIVE = "inconclusive"
+    DUPLICATE_FINDING = "duplicate_finding"
+    RETRY_TIMEOUT = "retry_timeout"
+    RETRY_FAILED = "retry_failed"
+    UNEXPECTED_FINDING_TYPE = "unexpected_finding_type"
+
+
+class RetryTarget(StrEnum):
+    NONE = "none"
+    ANALYSIS = "analysis"
+    RETRIEVAL = "retrieval"
+
+
+class ValidationAttemptStage(StrEnum):
+    INITIAL = "initial"
+    RETRY = "retry"
+
+
 class PolicyCoverageStatus(StrEnum):
     COVERED = "covered"
     MISSING = "missing"
@@ -122,6 +170,16 @@ class RiskAnalysisRequest(BaseModel):
         default=None,
         description="Override model-assisted analysis for this run",
     )
+    enable_validation: bool | None = Field(
+        default=None,
+        description="Override evidence validation for this run",
+    )
+    validation_max_retries: int | None = Field(
+        default=None,
+        ge=0,
+        le=5,
+        description="Override the bounded correction retry limit for validation",
+    )
 
 
 class RiskAnalysisRunResponse(BaseModel):
@@ -161,9 +219,15 @@ class RiskFindingResponse(BaseModel):
     contract_source_reference: str | None = Field(
         default=None, description="Contract citation locator"
     )
+    contract_page_number: int | None = Field(
+        default=None, description="Page of the cited contract text"
+    )
     policy_quote: str | None = Field(default=None, description="Verbatim policy excerpt")
     policy_source_reference: str | None = Field(
         default=None, description="Policy citation locator"
+    )
+    policy_page_number: int | None = Field(
+        default=None, description="Page of the cited policy text"
     )
     policy_id: str | None = Field(default=None, description="Policy that supplied the requirement")
     policy_version: str | None = Field(default=None, description="Policy version at analysis time")
@@ -172,6 +236,18 @@ class RiskFindingResponse(BaseModel):
         default=None, description="Model confidence for model-generated findings only"
     )
     review_status: ReviewStatus = Field(..., description="Human review state")
+    validation_status: ValidationStatus = Field(
+        default=ValidationStatus.PENDING, description="Independent evidence validation state"
+    )
+    validation_attempts: int = Field(
+        default=0, description="Number of validation checks performed"
+    )
+    validation_error_categories: list[ValidationErrorCategory] = Field(
+        default_factory=list, description="Machine-readable validation failures"
+    )
+    last_validated_at: str | None = Field(
+        default=None, description="ISO 8601 timestamp of the latest validation"
+    )
     suggested_question: str = Field(..., description="Question for the reviewer to follow up on")
     analysis_model: str = Field(..., description="Analyzer or model that produced the finding")
     policy_versions: list[str] = Field(

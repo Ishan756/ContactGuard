@@ -12,6 +12,7 @@ from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestContextMiddleware
 from app.db.session import init_db
 from app.schemas.health import RootHealthResponse
+from app.services.workflow.checkpointer import CheckpointManager
 
 settings = get_settings()
 setup_logging(
@@ -31,8 +32,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_env,
     )
     await init_db()
-    yield
-    logger.info("Shutting down %s", settings.app_name)
+    checkpoint_manager = CheckpointManager(settings)
+    try:
+        try:
+            app.state.workflow_checkpointer = await checkpoint_manager.start()
+        except Exception as exc:
+            if settings.is_production:
+                raise
+            logger.warning(
+                "LangGraph persistent checkpointer unavailable (%s); falling back to "
+                "an in-memory checkpointer for local development.",
+                exc,
+            )
+            await checkpoint_manager.stop()
+            checkpoint_manager = CheckpointManager(settings, backend="memory")
+            app.state.workflow_checkpointer = await checkpoint_manager.start()
+        app.state.workflow_checkpoint_manager = checkpoint_manager
+        yield
+    finally:
+        await checkpoint_manager.stop()
+        logger.info("Shutting down %s", settings.app_name)
 
 
 def create_application() -> FastAPI:
