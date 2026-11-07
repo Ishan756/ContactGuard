@@ -184,6 +184,27 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Evidence Validation / Critic Agent
+    validation_enable: bool = Field(
+        default=True,
+        description="Automatically validate risk findings after analysis",
+    )
+    validation_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum bounded correction retries per finding",
+    )
+    validation_explanation_min_overlap: int = Field(
+        default=2,
+        ge=1,
+        description="Minimum meaningful citation tokens an explanation must share",
+    )
+    validation_duplicate_detection: bool = Field(
+        default=True,
+        description="Reject duplicate findings that share a deterministic fingerprint",
+    )
+
     # Policy Chunking and Retrieval Limits
     policy_chunk_size: int = Field(
         default=500,

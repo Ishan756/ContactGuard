@@ -10,6 +10,8 @@ from app.core.embeddings.factory import get_embedding_provider
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import get_llm_provider
 from app.db.models import (
+    EvidenceValidationAttempt,
+    EvidenceValidationRun,
     ExtractionRunStatus,
     PolicyRetrievalEvidence,
     PolicyRetrievalRun,
@@ -34,9 +36,21 @@ from app.schemas.risk import (
     RiskFindingResponse,
     RiskPriority,
     SeverityBasis,
+    ValidationAttemptStage,
+    ValidationErrorCategory,
+    ValidationStatus,
+)
+from app.schemas.validation import (
+    EvidenceValidationAttemptResponse,
+    EvidenceValidationRequest,
+    EvidenceValidationResponse,
+    EvidenceValidationRunListResponse,
+    EvidenceValidationRunResponse,
+    ValidationFeedbackItem,
 )
 from app.services.risk.analysis import RiskAnalysisService
 from app.services.risk.retrieval import ClauseRetrieval, PolicyRetrievalService
+from app.services.risk.validation import EvidenceValidationService
 from app.services.vector.qdrant_service import QdrantVectorService
 
 router = APIRouter(prefix="/documents", tags=["Policy Retrieval & Risk Analysis"])
@@ -63,6 +77,12 @@ def get_risk_analysis_service(
         retrieval_service=retrieval_service,
         settings=settings,
     )
+
+
+def get_evidence_validation_service(
+    settings: Settings = Depends(get_settings),
+) -> EvidenceValidationService:
+    return EvidenceValidationService(settings=settings)
 
 
 def _format_datetime(value: datetime | None) -> str | None:
@@ -167,7 +187,39 @@ def map_analysis_run_response(run: RiskAnalysisRun) -> RiskAnalysisRunResponse:
     )
 
 
+def _validation_categories(value: str | None) -> list[ValidationErrorCategory]:
+    categories: list[ValidationErrorCategory] = []
+    for item in _parse_json_list(value):
+        try:
+            categories.append(ValidationErrorCategory(item))
+        except ValueError:
+            continue
+    return categories
+
+
+def _validation_feedback(value: str | None) -> list[ValidationFeedbackItem]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    feedback: list[ValidationFeedbackItem] = []
+    for item in parsed:
+        try:
+            feedback.append(ValidationFeedbackItem.model_validate(item))
+        except Exception:
+            continue
+    return feedback
+
+
 def map_finding_response(finding: RiskFinding) -> RiskFindingResponse:
+    try:
+        validation_status = ValidationStatus(finding.validation_status)
+    except ValueError:
+        validation_status = ValidationStatus.PENDING
     return RiskFindingResponse(
         finding_id=finding.id,
         document_id=finding.document_id,
@@ -182,17 +234,85 @@ def map_finding_response(finding: RiskFinding) -> RiskFindingResponse:
         rule_id=finding.rule_id,
         contract_quote=finding.contract_quote,
         contract_source_reference=finding.contract_source_reference,
+        contract_page_number=finding.contract_page_number,
         policy_quote=finding.policy_quote,
         policy_source_reference=finding.policy_source_reference,
+        policy_page_number=finding.policy_page_number,
         policy_id=finding.policy_id,
         policy_version=finding.policy_version,
         explanation=finding.explanation,
         confidence=finding.confidence,
         review_status=ReviewStatus(finding.review_status),
+        validation_status=validation_status,
+        validation_attempts=finding.validation_attempts or 0,
+        validation_error_categories=_validation_categories(
+            finding.validation_error_categories
+        ),
+        last_validated_at=_format_datetime(finding.last_validated_at),
         suggested_question=finding.suggested_question,
         analysis_model=finding.analysis_model,
         policy_versions=_parse_json_list(finding.policy_versions),
         created_at=_format_datetime(finding.created_at) or "",
+    )
+
+
+def map_validation_run_response(
+    run: EvidenceValidationRun,
+) -> EvidenceValidationRunResponse:
+    return EvidenceValidationRunResponse(
+        validation_run_id=run.id,
+        document_id=run.document_id,
+        analysis_run_id=run.analysis_run_id,
+        retrieval_run_id=run.retrieval_run_id,
+        status=ExtractionRunStatus(run.status),
+        max_retries=run.max_retries,
+        findings_validated=run.findings_validated,
+        verified_count=run.verified_count,
+        unverified_count=run.unverified_count,
+        needs_review_count=run.needs_review_count,
+        missing_evidence_count=run.missing_evidence_count,
+        inconclusive_count=run.inconclusive_count,
+        retries_attempted=run.retries_attempted,
+        warnings=_parse_json_list(run.warnings),
+        error_message=run.error_message,
+        created_at=_format_datetime(run.created_at) or "",
+        completed_at=_format_datetime(run.completed_at),
+    )
+
+
+def map_validation_attempt_response(
+    attempt: EvidenceValidationAttempt,
+) -> EvidenceValidationAttemptResponse:
+    try:
+        stage = ValidationAttemptStage(attempt.stage)
+    except ValueError:
+        stage = ValidationAttemptStage.INITIAL
+    try:
+        outcome = ValidationStatus(attempt.outcome)
+    except ValueError:
+        outcome = ValidationStatus.UNVERIFIED
+    retry_error_category = None
+    if attempt.retry_error_category:
+        try:
+            retry_error_category = ValidationErrorCategory(
+                attempt.retry_error_category
+            )
+        except ValueError:
+            retry_error_category = None
+    return EvidenceValidationAttemptResponse(
+        attempt_id=attempt.id,
+        validation_run_id=attempt.validation_run_id,
+        finding_id=attempt.finding_id,
+        attempt_number=attempt.attempt_number,
+        stage=stage,
+        outcome=outcome,
+        retry_target=attempt.retry_target,  # pydantic parses the enum value
+        error_categories=_validation_categories(attempt.error_categories),
+        feedback=_validation_feedback(attempt.feedback),
+        retry_error_category=retry_error_category,
+        created_at=_format_datetime(attempt.created_at) or "",
+        completed_at=_format_datetime(attempt.completed_at),
+        duration_ms=attempt.duration_ms,
     )
 
 
@@ -262,6 +382,7 @@ async def analyze_risk(
     request: RiskAnalysisRequest | None = None,
     db: AsyncSession = Depends(get_db),
     service: RiskAnalysisService = Depends(get_risk_analysis_service),
+    validation_service: EvidenceValidationService = Depends(get_evidence_validation_service),
 ) -> RiskAnalysisResponse:
     request = request or RiskAnalysisRequest()
     run, findings = await service.analyze(
@@ -270,6 +391,18 @@ async def analyze_risk(
         retrieval_run_id=request.retrieval_run_id,
         enable_model_analysis=request.enable_model_analysis,
     )
+    should_validate = (
+        validation_service.settings.validation_enable
+        if request.enable_validation is None
+        else request.enable_validation
+    )
+    if should_validate and findings:
+        _, findings, _ = await validation_service.validate_findings(
+            document_id=document_id,
+            db=db,
+            analysis_run_id=run.id,
+            max_retries=request.validation_max_retries,
+        )
     return RiskAnalysisResponse(
         document_id=document_id,
         run=map_analysis_run_response(run),
@@ -346,4 +479,80 @@ async def list_analysis_runs(
         document_id=document_id,
         total=total,
         runs=[map_analysis_run_response(run) for run in runs],
+    )
+
+
+@router.post(
+    "/{document_id}/validate-findings",
+    response_model=EvidenceValidationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Independently validate risk findings and request bounded corrections",
+    description=(
+        "Re-checks each finding against persisted contract clauses, policy chunks, retrieval "
+        "evidence, page numbers, severity configuration, and explanation support. Failed "
+        "findings may be corrected by a bounded, deterministic retry loop; exhausted findings "
+        "remain unverified and are never silently approved."
+    ),
+)
+async def validate_findings(
+    document_id: str,
+    request: EvidenceValidationRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    service: EvidenceValidationService = Depends(get_evidence_validation_service),
+) -> EvidenceValidationResponse:
+    request = request or EvidenceValidationRequest()
+    run, findings, attempts = await service.validate(
+        document_id=document_id, request=request, db=db
+    )
+    return EvidenceValidationResponse(
+        document_id=document_id,
+        run=map_validation_run_response(run),
+        findings=[map_finding_response(finding) for finding in findings],
+        attempts=[map_validation_attempt_response(attempt) for attempt in attempts],
+    )
+
+
+@router.get(
+    "/{document_id}/validation-runs",
+    response_model=EvidenceValidationRunListResponse,
+    summary="List evidence validation runs",
+)
+async def list_validation_runs(
+    document_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    service: EvidenceValidationService = Depends(get_evidence_validation_service),
+) -> EvidenceValidationRunListResponse:
+    runs, total = await service.list_runs(
+        document_id=document_id, db=db, limit=limit, offset=offset
+    )
+    return EvidenceValidationRunListResponse(
+        document_id=document_id,
+        total=total,
+        runs=[map_validation_run_response(run) for run in runs],
+    )
+
+
+@router.get(
+    "/{document_id}/validation-runs/{validation_run_id}",
+    response_model=EvidenceValidationResponse,
+    summary="Get a validation run, its findings, and every attempt",
+)
+async def get_validation_run(
+    document_id: str,
+    validation_run_id: str,
+    db: AsyncSession = Depends(get_db),
+    service: EvidenceValidationService = Depends(get_evidence_validation_service),
+) -> EvidenceValidationResponse:
+    run = await service.get_run(
+        document_id=document_id, validation_run_id=validation_run_id, db=db
+    )
+    findings = await service.get_run_findings(run, db)
+    attempts = await service.get_attempts(validation_run_id=run.id, db=db)
+    return EvidenceValidationResponse(
+        document_id=document_id,
+        run=map_validation_run_response(run),
+        findings=[map_finding_response(finding) for finding in findings],
+        attempts=[map_validation_attempt_response(attempt) for attempt in attempts],
     )

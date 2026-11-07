@@ -183,8 +183,11 @@ rules for liability caps, termination notice, and payment periods, checks for re
 missing clauses, and uses citation-validated model analysis only when no rule fires.
 Severity comes from policy rules/configuration, never from model confidence, and possible
 legal concerns are labelled for qualified human review rather than asserted as legal
-conclusions. See [docs/risk_analysis.md](docs/risk_analysis.md) for rule definitions,
-severity settings, and annotated example findings.
+conclusions. An independent Evidence Validation Agent then re-checks citations,
+provenance, page numbers, explanation support, and severity against persisted sources.
+Invalid findings receive bounded correction retries and remain unverified rather than being
+silently approved. See [docs/risk_analysis.md](docs/risk_analysis.md) for rule definitions,
+the validation lifecycle, severity settings, and annotated example findings.
 
 ---
 

@@ -47,6 +47,13 @@ async def override_get_db():
 
 
 @pytest.fixture
+async def db_session():
+    """Direct session for arranging validator test data in the shared test database."""
+    async with TestingSessionLocal() as session:
+        yield session
+
+
+@pytest.fixture
 async def async_client():
     """Async test client using httpx ASGITransport with test database overrides."""
     app.dependency_overrides[get_db] = override_get_db

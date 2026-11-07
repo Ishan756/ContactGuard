@@ -1,9 +1,13 @@
 # Policy Retrieval & Risk Analysis Agents
 
-Prompt 5 adds two sequential agents after clause extraction:
+Prompt 5 adds two sequential agents after clause extraction, and Prompt 6 adds an
+independent critic that verifies their evidence before a finding can be treated as verified:
 
 1. **Policy Retrieval Agent** — retrieves active company-policy passages for each extracted clause.
 2. **Risk Analysis Agent** — compares clauses with retrieved evidence and persists review findings.
+3. **Evidence Validation Agent (Critic)** — independently re-checks every finding against
+   persisted contract and policy sources, requests bounded corrections, and records every
+   attempt. Failed findings remain `unverified`/`needs_review`; they are never auto-approved.
 
 Risk findings are **review aids, not legal advice**. ContractGuard does not claim that a
 clause is illegal, unlawful, void, invalid, or unenforceable. Findings contain verbatim
@@ -16,8 +20,10 @@ contract and policy citations so a human reviewer can verify each one.
 ```text
 POST /documents/{id}/extract-clauses
   -> POST /documents/{id}/retrieve-policies
-       -> POST /documents/{id}/analyze-risk
+       -> POST /documents/{id}/analyze-risk  (runs validation automatically)
             -> GET /documents/{id}/findings
+            -> POST /documents/{id}/validate-findings  (re-run validation)
+                 -> GET /documents/{id}/validation-runs
 ```
 
 The retrieval agent embeds deterministic category + meaning queries and searches the
@@ -76,8 +82,56 @@ Unverified legal conclusions are sanitized. For example, model text saying a cla
 "illegal and unenforceable" is replaced with "may raise a legal concern requiring qualified
 human review".
 
-There is no critic loop yet. Model output is citation-validated, not independently
-re-reviewed by another model.
+The risk-analysis service rejects non-verbatim model quotes before persistence. The
+Evidence Validation Agent then independently re-reads the database sources; it never trusts
+the finding's self-assessment.
+
+---
+
+## Independent evidence validation and correction retries
+
+The validator persists one `EvidenceValidationRun` per validation pass and one
+`EvidenceValidationAttempt` for every check or correction attempt. It verifies:
+
+- Contract quotes are verbatim substrings of the referenced persisted clause.
+- Policy quotes are verbatim substrings of the referenced policy chunk, or of policy
+  metadata when the requirement source is `policy:<id>:metadata`.
+- The document, clause, retrieval-run, policy, policy-version, and page-number identifiers
+  belong together and match the cited evidence.
+- Policy deviation findings use a policy passage that was actually present in the referenced
+  retrieval run.
+- Missing-clause findings are not contradicted by an already-extracted clause.
+- Missing-evidence findings are only accepted when the retrieval run has no evidence for
+  that clause; evidence present means the finding is invalid.
+- The explanation shares meaningful terms with its cited contract/policy evidence.
+- Severity equals the configured rule/requirement priority, never model confidence.
+
+Failures are classified into machine-readable categories such as
+`contract_quote_not_found`, `policy_quote_not_found`, `policy_version_mismatch`,
+`page_number_mismatch`, `unsupported_explanation`, `severity_mismatch`,
+`retrieval_evidence_missing`, and `duplicate_finding`. Duplicate findings are merged before
+persistence and flagged with a stable fingerprint if they still appear in stored data.
+
+### Finding lifecycle
+
+```text
+pending -> verified
+pending -> unverified -> (bounded correction retry) -> verified
+pending -> unverified -> retries exhausted -> unverified / needs_review
+pending -> missing_evidence   (valid retrieval gap; still requires human review)
+pending -> inconclusive       (requirement/evidence cannot be conclusively checked)
+```
+
+`verified` means the **citations and provenance passed independent checks**. It does not
+mean the contract is compliant or that legal review is complete. Missing evidence and
+inconclusive findings are deliberately not marked verified. Human `review_status` remains
+`needs_review`; validation never dismisses or approves a finding on a reviewer's behalf.
+
+Retries are deterministic and bounded by `VALIDATION_MAX_RETRIES` (default `2`, hard limit
+`5`). Contract/clause/explanation/severity failures route to the analysis correction step;
+policy citation/retrieval failures route to the retrieval correction step. Each attempt has
+an outcome, error categories, retry target, duration, and timestamps. Timeouts and retry
+exhaustion stop the loop and leave the finding `unverified`.
 
 ---
 
@@ -104,6 +158,12 @@ re-reviewed by another model.
   "explanation": "The contract contains unlimited liability while the active policy requires a cap of 12 months of fees.",
   "confidence": null,
   "review_status": "needs_review",
+  "validation_status": "verified",
+  "validation_attempts": 1,
+  "validation_error_categories": [],
+  "contract_page_number": 1,
+  "policy_page_number": 1,
+  "last_validated_at": "2026-11-06T14:40:03Z",
   "analysis_model": "policy-rule-engine"
 }
 ```
@@ -128,6 +188,9 @@ re-reviewed by another model.
   "explanation": "The contract allows disclosure without prior approval while the policy requires prior written approval.",
   "confidence": 0.87,
   "review_status": "needs_review",
+  "validation_status": "verified",
+  "validation_attempts": 1,
+  "validation_error_categories": [],
   "analysis_model": "gemini-1.5-pro"
 }
 ```
@@ -144,8 +207,15 @@ re-reviewed by another model.
 | `/api/v1/documents/{id}/analysis-runs` | GET | List analysis runs |
 | `/api/v1/documents/{id}/findings` | GET | List findings (defaults to latest analysis run) |
 | `/api/v1/documents/{id}/findings/{finding_id}` | GET | Get one finding with citations |
+| `/api/v1/documents/{id}/validate-findings` | POST | Re-run independent validation with bounded retries |
+| `/api/v1/documents/{id}/validation-runs` | GET | List validation runs |
+| `/api/v1/documents/{id}/validation-runs/{run_id}` | GET | Get a validation run, findings, and every attempt |
 
-`analyze-risk` accepts an optional `retrieval_run_id` and `enable_model_analysis` override.
+`analyze-risk` accepts optional `retrieval_run_id`, `enable_model_analysis`,
+`enable_validation`, and `validation_max_retries` overrides. Validation runs automatically
+unless `VALIDATION_ENABLE=false` or `enable_validation=false`; unresolved findings are still
+persisted as unverified rather than hidden. `validate-findings` accepts optional
+`analysis_run_id`, `finding_ids`, `max_retries`, and `enable_retries`.
 The retrieval request accepts optional `policy_versions` and `policy_statuses` filters.
 `findings` accepts `analysis_run_id`, `severity`, and `category` filters.
 
@@ -169,6 +239,11 @@ RISK_SEVERITY_MISSING_CLAUSE=high
 RISK_SEVERITY_MISSING_EVIDENCE=informational
 RISK_SEVERITY_POSSIBLE_LEGAL_CONCERN=informational
 RISK_REQUIRED_CLAUSE_CATEGORIES=[]
+
+VALIDATION_ENABLE=true
+VALIDATION_MAX_RETRIES=2
+VALIDATION_EXPLANATION_MIN_OVERLAP=2
+VALIDATION_DUPLICATE_DETECTION=true
 ```
 
 LLM provider configuration is shared with clause extraction. Use `LLM_PROVIDER=mock` for

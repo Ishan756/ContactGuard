@@ -80,6 +80,12 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="RiskFinding.created_at",
     )
+    evidence_validation_runs: Mapped[list["EvidenceValidationRun"]] = relationship(
+        "EvidenceValidationRun",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="EvidenceValidationRun.created_at",
+    )
 
 
 class DocumentChunk(Base):
@@ -406,6 +412,12 @@ class RiskAnalysisRun(Base):
         cascade="all, delete-orphan",
         order_by="RiskFinding.created_at",
     )
+    validation_runs: Mapped[list["EvidenceValidationRun"]] = relationship(
+        "EvidenceValidationRun",
+        back_populates="analysis_run",
+        cascade="all, delete-orphan",
+        order_by="EvidenceValidationRun.created_at",
+    )
 
 
 class RiskFinding(Base):
@@ -454,6 +466,17 @@ class RiskFinding(Base):
     suggested_question: Mapped[str] = mapped_column(Text, nullable=False)
     analysis_model: Mapped[str] = mapped_column(String(120), nullable=False)
     policy_versions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contract_page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    policy_page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    validation_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending", index=True
+    )
+    validation_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    validation_error_categories: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -464,4 +487,105 @@ class RiskFinding(Base):
     document: Mapped["Document"] = relationship("Document", back_populates="risk_findings")
     analysis_run: Mapped["RiskAnalysisRun"] = relationship(
         "RiskAnalysisRun", back_populates="findings"
+    )
+    validation_attempt_records: Mapped[list["EvidenceValidationAttempt"]] = relationship(
+        "EvidenceValidationAttempt",
+        back_populates="finding",
+        cascade="all, delete-orphan",
+        order_by="EvidenceValidationAttempt.created_at",
+    )
+
+
+class EvidenceValidationRun(Base):
+    __tablename__ = "evidence_validation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    analysis_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("risk_analysis_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    retrieval_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("policy_retrieval_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=ExtractionRunStatus.RUNNING
+    )
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    findings_validated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    verified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unverified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    needs_review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    inconclusive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retries_attempted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    warnings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    document: Mapped["Document"] = relationship("Document", back_populates="evidence_validation_runs")
+    analysis_run: Mapped["RiskAnalysisRun"] = relationship(
+        "RiskAnalysisRun", back_populates="validation_runs"
+    )
+    attempts: Mapped[list["EvidenceValidationAttempt"]] = relationship(
+        "EvidenceValidationAttempt",
+        back_populates="validation_run",
+        cascade="all, delete-orphan",
+        order_by="EvidenceValidationAttempt.created_at",
+    )
+
+
+class EvidenceValidationAttempt(Base):
+    __tablename__ = "evidence_validation_attempts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    validation_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("evidence_validation_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    finding_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("risk_findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    retry_target: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
+    error_categories: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_error_category: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    validation_run: Mapped["EvidenceValidationRun"] = relationship(
+        "EvidenceValidationRun", back_populates="attempts"
+    )
+    finding: Mapped["RiskFinding"] = relationship(
+        "RiskFinding", back_populates="validation_attempt_records"
     )

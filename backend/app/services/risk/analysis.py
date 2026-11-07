@@ -37,6 +37,7 @@ from app.schemas.risk import (
     RiskPriority,
     SeverityBasis,
 )
+from app.services.risk.fingerprint import finding_fingerprint
 from app.services.risk.retrieval import (
     ClauseRetrieval,
     PolicyRetrievalService,
@@ -543,6 +544,7 @@ class RiskAnalysisService:
         policy_source_reference = finding.policy_source_reference or (
             evidence.source_identifier if evidence else None
         )
+        clause = clauses_by_id.get(clause_id) if clause_id else None
         analysis_model = (
             self.llm.model_name
             if finding.severity_basis == SeverityBasis.MODEL_ANALYSIS
@@ -566,6 +568,8 @@ class RiskAnalysisService:
             policy_source_reference=policy_source_reference,
             policy_id=policy_id or None,
             policy_version=policy_version,
+            contract_page_number=clause.page_number if clause is not None else None,
+            policy_page_number=evidence.page_number if evidence is not None else None,
             explanation=finding.explanation,
             confidence=None,
             review_status=ReviewStatus.NEEDS_REVIEW.value,
@@ -678,10 +682,20 @@ class RiskAnalysisService:
                 )
                 findings.append(self._finding_model(finding, clauses_by_id, policy_versions))
 
+            deduplicated: dict[str, RiskFinding] = {}
             for finding in findings:
                 finding.document_id = document_id
                 finding.retrieval_run_id = retrieval_run.id
                 finding.analysis_run_id = run.id
+                finding.fingerprint = finding_fingerprint(finding)
+                deduplicated.setdefault(finding.fingerprint, finding)
+            if len(deduplicated) != len(findings):
+                warnings.append(
+                    f"Merged {len(findings) - len(deduplicated)} duplicate finding(s) "
+                    "before persistence."
+                )
+            findings = list(deduplicated.values())
+            for finding in findings:
                 db.add(finding)
 
             run.clauses_analyzed = len(clauses)
