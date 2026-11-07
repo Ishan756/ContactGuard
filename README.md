@@ -61,7 +61,9 @@ ContactGuard/
 |   |-- architecture.md          # Topology, subsystem interactions
 |   |-- api.md                   # Endpoint schemas and request tracing
 |   |-- getting_started.md       # Local and Docker setup instructions
-|   +-- multi_agent_blueprint.md # Planned LangGraph agent graph architecture
+|   |-- multi_agent_blueprint.md # Planned LangGraph agent graph architecture
+|   |-- clause_extraction.md    # Clause Extraction Agent configuration and examples
+|   +-- risk_analysis.md        # Policy Retrieval and Risk Analysis Agent rules/API
 |
 |-- evaluation/                  # Benchmark datasets and evaluation harnesses
 |   |-- benchmarks/
@@ -169,6 +171,20 @@ and a typed category schema. It never assigns legal risk scores. See
 [docs/clause_extraction.md](docs/clause_extraction.md) for provider configuration
 (Gemini credentials or the explicitly enabled mock provider), API usage, and an example
 structured response.
+
+---
+
+## Policy Retrieval & Risk Analysis Agents
+
+The Policy Retrieval Agent finds active company-policy evidence for each extracted clause
+using deterministic queries and Qdrant semantic search, with policy status/version filters
+and explicit missing-coverage markers. The Risk Analysis Agent then applies deterministic
+rules for liability caps, termination notice, and payment periods, checks for required but
+missing clauses, and uses citation-validated model analysis only when no rule fires.
+Severity comes from policy rules/configuration, never from model confidence, and possible
+legal concerns are labelled for qualified human review rather than asserted as legal
+conclusions. See [docs/risk_analysis.md](docs/risk_analysis.md) for rule definitions,
+severity settings, and annotated example findings.
 
 ---
 

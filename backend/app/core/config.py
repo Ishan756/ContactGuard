@@ -119,6 +119,71 @@ class Settings(BaseSettings):
         description="Confidence below which an extracted clause is flagged for review",
     )
 
+    # Policy Retrieval Agent
+    policy_retrieval_limit: int = Field(
+        default=5,
+        description="Maximum active policy evidence passages returned per clause",
+    )
+    policy_retrieval_min_similarity: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity for clause-to-policy retrieval",
+    )
+    policy_retrieval_statuses: list[str] = Field(
+        default=["active"],
+        description="Policy statuses eligible for retrieval and risk analysis",
+    )
+
+    # Risk Analysis Agent
+    risk_analysis_enable_model: bool = Field(
+        default=True,
+        description="Enable model-assisted mismatch analysis after deterministic rules",
+    )
+    risk_severity_liability_unlimited: str = Field(
+        default="critical",
+        description="Review priority when contract liability is unlimited",
+    )
+    risk_severity_liability_cap: str = Field(
+        default="high",
+        description="Review priority for a liability cap deviation",
+    )
+    risk_severity_termination_notice: str = Field(
+        default="high",
+        description="Review priority for insufficient termination notice",
+    )
+    risk_severity_payment_period: str = Field(
+        default="medium",
+        description="Review priority for a payment period deviation",
+    )
+    risk_severity_policy_deviation: str = Field(
+        default="medium",
+        description="Default review priority for a model-identified policy deviation",
+    )
+    risk_severity_missing_data_protection: str = Field(
+        default="high",
+        description="Review priority when an active policy requires a missing data-protection clause",
+    )
+    risk_severity_missing_clause: str = Field(
+        default="high",
+        description="Default review priority for a required but missing clause category",
+    )
+    risk_severity_missing_evidence: str = Field(
+        default="informational",
+        description="Review priority when no relevant policy evidence exists",
+    )
+    risk_severity_possible_legal_concern: str = Field(
+        default="informational",
+        description="Review priority for an unverified possible legal concern",
+    )
+    risk_required_clause_categories: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional clause categories always treated as required; categories are also "
+            "inferred from the active policy corpus"
+        ),
+    )
+
     # Policy Chunking and Retrieval Limits
     policy_chunk_size: int = Field(
         default=500,

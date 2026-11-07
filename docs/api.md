@@ -241,6 +241,113 @@ and validate clauses; they do not assign risk scores.
 
 ---
 
+## Policy Retrieval & Risk Analysis Endpoints
+
+Retrieval and risk analysis are separate from clause extraction. Retrieval returns active
+policy evidence and explicit coverage gaps. Risk analysis persists review findings with
+verbatim contract and policy citations. See [Risk Analysis Agents](risk_analysis.md) for
+rule definitions, severity configuration, and example findings.
+
+### 1. Retrieve Policy Evidence
+- **Endpoint**: `POST /api/v1/documents/{document_id}/retrieve-policies`
+- **Body** (optional):
+```json
+{
+  "policy_versions": ["1.0.0"],
+  "policy_statuses": ["active"]
+}
+```
+- **Behavior**: Draft/archived policies are excluded by default. Clauses with no matching
+  evidence are marked `coverage_status: "missing"`.
+- **Response**: `201 Created` (`PolicyRetrievalResponse`)
+
+### 2. List Retrieval Runs
+- **Endpoint**: `GET /api/v1/documents/{document_id}/retrieval-runs`
+- **Response**: `200 OK` (`PolicyRetrievalRunListResponse`)
+
+### 3. Analyze Risk
+- **Endpoint**: `POST /api/v1/documents/{document_id}/analyze-risk`
+- **Body** (optional):
+```json
+{
+  "retrieval_run_id": "optional-run-id",
+  "enable_model_analysis": true
+}
+```
+- **Behavior**: Deterministic rules run first. Model analysis is only used when no rule
+  fires, policy evidence exists, and model analysis is enabled. Severity comes from policy
+  rules/configuration, not model confidence.
+- **Response**: `201 Created`
+```json
+{
+  "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+  "run": {
+    "run_id": "b63f...",
+    "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+    "retrieval_run_id": "4618...",
+    "status": "completed",
+    "provider": "gemini",
+    "model_name": "gemini-1.5-pro",
+    "clauses_analyzed": 12,
+    "findings_count": 4,
+    "model_analysis_enabled": true,
+    "policy_versions": ["1.0.0"],
+    "warnings": [],
+    "error_message": null,
+    "created_at": "2026-11-06T14:40:00Z",
+    "completed_at": "2026-11-06T14:40:02Z"
+  },
+  "findings": [
+    {
+      "finding_id": "b5b3b99f-5d29-4f3e-93ec-9d8805f9ec1d",
+      "document_id": "e0b82142-992d-45db-9964-6dfbf1e2f75a",
+      "clause_id": "15c9a4aa-1f0d-5f54-9f7a-cd84d3a83992",
+      "clause_category": "liability",
+      "retrieval_run_id": "4618...",
+      "analysis_run_id": "b63f...",
+      "finding_type": "policy_deviation",
+      "risk_category": "liability",
+      "severity": "critical",
+      "severity_basis": "policy_rule",
+      "rule_id": "liability_unlimited",
+      "contract_quote": "The vendor's aggregate liability under this Agreement shall be unlimited.",
+      "contract_source_reference": "clause:15c9a4aa-1f0d-5f54-9f7a-cd84d3a83992",
+      "policy_quote": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid.",
+      "policy_source_reference": "pol:ac72...:p1:c0",
+      "policy_id": "ac72...",
+      "policy_version": "1.0.0",
+      "explanation": "The contract contains unlimited liability while the active policy requires a cap of 12 months of fees.",
+      "confidence": null,
+      "review_status": "needs_review",
+      "suggested_question": "Can liability be capped in line with the active policy before signature?",
+      "analysis_model": "policy-rule-engine",
+      "policy_versions": ["1.0.0"],
+      "created_at": "2026-11-06T14:40:02Z"
+    }
+  ]
+}
+```
+
+### 4. List Findings
+- **Endpoint**: `GET /api/v1/documents/{document_id}/findings`
+- **Query Parameters**:
+  - `analysis_run_id`: optional run filter (defaults to latest run)
+  - `severity`: optional review priority filter
+  - `category`: optional risk category filter
+  - `limit`: int (default: 100, max: 500)
+  - `offset`: int (default: 0)
+- **Response**: `200 OK` (`RiskFindingListResponse`)
+
+### 5. Get a Single Finding
+- **Endpoint**: `GET /api/v1/documents/{document_id}/findings/{finding_id}`
+- **Response**: `200 OK` (`RiskFindingResponse`)
+
+### 6. List Risk Analysis Runs
+- **Endpoint**: `GET /api/v1/documents/{document_id}/analysis-runs`
+- **Response**: `200 OK` (`RiskAnalysisRunListResponse`)
+
+---
+
 ## Limitations of Text Extraction
 
 1. **Scanned & Image-Only Documents**:
