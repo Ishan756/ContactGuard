@@ -36,11 +36,14 @@ ContactGuard/
 |-- frontend/                    # React 18 + TypeScript + Vite dashboard
 |   |-- src/
 |   |   |-- components/
+|   |   |   |-- domain/          # FindingCard, DocumentViewer, WorkflowTimeline
 |   |   |   |-- layout/          # DashboardLayout, Sidebar, Header
-|   |   |   +-- ui/              # Badge, Card, Button components
-|   |   |-- pages/               # DashboardOverview, AuditQueue, SystemHealth, Settings
+|   |   |   +-- ui/              # Card, Button, Badge, state and status components
+|   |   |-- pages/               # Dashboard, Upload, Contract Review, Findings,
+|   |   |                        # Policy Library, Review History, Health, Settings
 |   |   |-- services/
-|   |   |   +-- apiClient.ts     # Typed API client with request ID propagation
+|   |   |   |-- apiClient.ts     # Typed API client with auth, request IDs, idempotency
+|   |   |   +-- session.ts       # Reviewer credential persistence
 |   |   |-- types/               # Shared TypeScript schemas
 |   |   |-- tests/               # Vitest + Testing Library test suite
 |   |   |-- App.tsx              # Router configuration
@@ -129,7 +132,39 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # 3. Run Frontend
 cd ../frontend
 npm install
-npm run dev
+npm run dev -- --host 0.0.0.0
+```
+
+Open `http://localhost:5173`. The Vite dev server proxies `/api` and `/health` to
+`http://localhost:8000`. In development the UI defaults to reviewer `local-reviewer` with
+the configured `WORKFLOW_REVIEW_API_KEY`; set credentials explicitly on the Settings page
+or via `VITE_REVIEWER_ID` / `VITE_WORKFLOW_API_KEY`.
+
+### 3. Frontend Review Dashboard
+
+The React workspace is backed exclusively by the FastAPI API:
+
+- **Overview** — document and workflow counts, risk distribution, verification status.
+- **Upload contracts** — PDF/DOCX upload, processing state, contract library.
+- **Contract review** — page-level source viewer, cited findings, workflow progress,
+  validation summaries, and approve/dismiss/request-revision reviewer actions.
+- **Findings** — severity/category/validation/review filters, sorting, pagination, and
+  finding detail pages with contract and policy citations.
+- **Policy library** — policy creation, PDF/DOCX upload, version/status display, and
+  semantic retrieval testing.
+- **Review history** — reviewer decisions, retries, revisions, and completion history.
+- **Settings** — local reviewer identity, protected workflow API key, live readiness.
+- **System health** — live liveness/readiness and component latency.
+
+Unverified findings are explicitly labelled, model explanations are visually separated
+from verbatim contract quotations, and workflow actions send `X-Reviewer-ID` and
+`X-Workflow-Key` headers. Frontend tests mock the API boundary with synthetic fixtures:
+
+```bash
+cd frontend
+npm run typecheck
+npm test
+npm run build
 ```
 
 ---

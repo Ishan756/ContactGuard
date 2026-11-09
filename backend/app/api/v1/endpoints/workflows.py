@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -20,6 +20,7 @@ from app.schemas.workflow import (
     WorkflowEventResponse,
     WorkflowResultsResponse,
     WorkflowResumeRequest,
+    WorkflowRunListResponse,
     WorkflowRunResponse,
     WorkflowStartRequest,
 )
@@ -184,6 +185,30 @@ async def start_workflow(
         request, principal, idempotency_key=idempotency_key
     )
     return map_workflow_response(run)
+
+
+@router.get(
+    "",
+    response_model=WorkflowRunListResponse,
+    summary="List workflow runs owned by the authenticated reviewer",
+)
+async def list_workflows(
+    document_id: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
+    service: WorkflowService = Depends(get_workflow_service),
+) -> WorkflowRunListResponse:
+    runs, total = await service.list_workflows(
+        principal,
+        document_id=document_id,
+        limit=limit,
+        offset=offset,
+    )
+    return WorkflowRunListResponse(
+        runs=[map_workflow_response(run) for run in runs],
+        total=total,
+    )
 
 
 @router.get(

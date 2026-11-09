@@ -1,26 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import App from "../App";
 
+function jsonResponse(payload: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    json: async () => payload,
+  } as Response;
+}
+
 describe("App Shell and Routing", () => {
   beforeEach(() => {
-    // Mock fetch for live and ready probes
-    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+    globalThis.fetch = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
       if (url.includes("/live")) {
-        return {
-          ok: true,
-          headers: new Headers(),
-          json: async () => ({
-            status: "ok",
-            timestamp: new Date().toISOString(),
-            uptime_seconds: 120,
-          }),
-        };
+        return jsonResponse({
+          status: "ok",
+          timestamp: new Date().toISOString(),
+          uptime_seconds: 120,
+        });
       }
-      return {
-        ok: true,
-        headers: new Headers(),
-        json: async () => ({
+      if (url.includes("/health/ready")) {
+        return jsonResponse({
           status: "healthy",
           app: "ContractGuard",
           version: "0.1.0",
@@ -31,34 +34,47 @@ describe("App Shell and Routing", () => {
             vector_db_qdrant: { status: "healthy", details: "Connected", latency_ms: 1.2 },
             relational_db_postgres: { status: "healthy", details: "Connected", latency_ms: 0.8 },
           },
-        }),
-      };
+        });
+      }
+      if (url.includes("/api/v1/workflows")) {
+        return jsonResponse({ runs: [], total: 0 });
+      }
+      if (url.includes("/api/v1/documents")) {
+        return jsonResponse({ documents: [], total: 0 });
+      }
+      return jsonResponse({});
     });
   });
 
-  it("renders the dashboard sidebar branding and navigation", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders the workspace branding and primary navigation", async () => {
     render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Uploaded contracts")).toBeInTheDocument();
+    });
 
     expect(screen.getByText("ContractGuard")).toBeInTheDocument();
-    expect(screen.getByText("Multi-Agent Platform")).toBeInTheDocument();
-    expect(screen.getByText("Overview")).toBeInTheDocument();
-    expect(screen.getByText("Audit Queue")).toBeInTheDocument();
-    expect(screen.getByText("System Health")).toBeInTheDocument();
-    expect(screen.getByText("Settings")).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText("Contracts Audited")).toBeInTheDocument();
-    });
+    expect(screen.getByText("Contract evidence review")).toBeInTheDocument();
+    expect(document.getElementById("nav-overview")).toHaveTextContent("Overview");
+    expect(document.getElementById("nav-upload")).toHaveTextContent("Upload contracts");
+    expect(document.getElementById("nav-findings")).toHaveTextContent("Findings");
+    expect(document.getElementById("nav-history")).toHaveTextContent("Review history");
+    expect(document.getElementById("nav-policies")).toHaveTextContent("Policy library");
+    expect(document.getElementById("nav-health")).toHaveTextContent("System health");
+    expect(document.getElementById("nav-settings")).toHaveTextContent("Settings");
   });
 
-  it("renders metric cards and architecture section on overview", async () => {
+  it("renders empty dashboard states from real API response shapes", async () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("Contracts Audited")).toBeInTheDocument();
-      expect(screen.getByText("High-Risk Flags")).toBeInTheDocument();
-      expect(screen.getByText("LangGraph Agents")).toBeInTheDocument();
-      expect(screen.getByText("Multi-Agent Pipeline Architecture")).toBeInTheDocument();
+      expect(screen.getByText("No findings yet")).toBeInTheDocument();
+      expect(screen.getByText("No workflow runs")).toBeInTheDocument();
+      expect(screen.getByText("No contracts uploaded")).toBeInTheDocument();
     });
   });
 });

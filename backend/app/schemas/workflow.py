@@ -111,6 +111,11 @@ class WorkflowRunResponse(BaseModel):
     decisions: list[ReviewDecisionResponse] = Field(default_factory=list)
 
 
+class WorkflowRunListResponse(BaseModel):
+    runs: list[WorkflowRunResponse] = Field(default_factory=list)
+    total: int = 0
+
+
 class WorkflowResultsResponse(BaseModel):
     workflow: WorkflowRunResponse
     report: dict[str, Any] | None = None

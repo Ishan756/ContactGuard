@@ -5,7 +5,7 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -337,6 +337,42 @@ class WorkflowService:
         self, workflow_id: str, principal: ReviewerPrincipal
     ) -> WorkflowRun:
         return await self._load_owned(workflow_id, principal)
+
+    async def list_workflows(
+        self,
+        principal: ReviewerPrincipal,
+        *,
+        document_id: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[WorkflowRun], int]:
+        async with self.session_factory() as db:
+            filters = [WorkflowRun.owner_reviewer_id == principal.reviewer_id]
+            if document_id:
+                filters.append(WorkflowRun.document_id == document_id)
+            total = (
+                await db.execute(
+                    select(func.count(WorkflowRun.id)).where(*filters)
+                )
+            ).scalar() or 0
+            runs = list(
+                (
+                    await db.execute(
+                        select(WorkflowRun)
+                        .options(
+                            selectinload(WorkflowRun.events),
+                            selectinload(WorkflowRun.decisions),
+                        )
+                        .where(*filters)
+                        .order_by(WorkflowRun.created_at.desc())
+                        .offset(offset)
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return runs, total
 
     async def get_results(
         self, workflow_id: str, principal: ReviewerPrincipal

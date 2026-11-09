@@ -392,7 +392,14 @@ who started a workflow may inspect results or resume it. Start and resume suppor
 `Idempotency-Key` header. See [workflow.md](workflow.md) for the full state machine,
 Mermaid diagram, checkpoint lifecycle, and decision semantics.
 
-### 1. Start Workflow
+### 1. List Workflows
+- **Endpoint**: `GET /api/v1/workflows`
+- **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`
+- **Query parameters**: optional `document_id`, `limit` (default `50`), `offset` (default `0`)
+- **Response**: `200 OK` (`WorkflowRunListResponse`) containing only workflows owned by
+the authenticated reviewer, newest first, with `runs` and `total`.
+
+### 2. Start Workflow
 - **Endpoint**: `POST /api/v1/workflows`
 - **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`, optional `Idempotency-Key`
 - **Body**:
@@ -410,18 +417,18 @@ retry limit. When findings exist, the graph persists an interrupt and returns
 `awaiting_review`; no legal or contractual action is executed.
 - **Response**: `201 Created` (`WorkflowRunResponse`)
 
-### 2. Inspect Workflow Status
+### 3. Inspect Workflow Status
 - **Endpoint**: `GET /api/v1/workflows/{workflow_id}`
 - **Response**: `200 OK` (`WorkflowRunResponse`) including status, current/interrupted
 node, step/retry/revision counts, review interrupt payload, events, and decisions.
 
-### 3. Retrieve Workflow Results
+### 4. Retrieve Workflow Results
 - **Endpoint**: `GET /api/v1/workflows/{workflow_id}/results`
 - **Response**: `200 OK` (`WorkflowResultsResponse`) with the review report, persisted
 findings, validation summary, verification/review completion flags, and
 `legal_action_performed: false`.
 
-### 4. Resume Human Review
+### 5. Resume Human Review
 - **Endpoint**: `POST /api/v1/workflows/{workflow_id}/resume`
 - **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`, optional `Idempotency-Key`
 - **Body**:

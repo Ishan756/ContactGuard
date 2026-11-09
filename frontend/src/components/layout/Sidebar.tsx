@@ -1,6 +1,50 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { ShieldCheck, LayoutDashboard, FileSearch, Activity, Settings as SettingsIcon } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  FileSearch,
+  FileText,
+  LayoutDashboard,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  UploadCloud,
+} from "lucide-react";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  id: string;
+  end?: boolean;
+}
+
+const primaryNav: NavItem[] = [
+  { to: "/", label: "Overview", icon: <LayoutDashboard size={18} />, id: "nav-overview", end: true },
+  { to: "/upload", label: "Upload contracts", icon: <UploadCloud size={18} />, id: "nav-upload" },
+  { to: "/findings", label: "Findings", icon: <FileSearch size={18} />, id: "nav-findings" },
+  { to: "/history", label: "Review history", icon: <FileText size={18} />, id: "nav-history" },
+  { to: "/policies", label: "Policy library", icon: <BookOpen size={18} />, id: "nav-policies" },
+];
+
+const systemNav: NavItem[] = [
+  { to: "/health", label: "System health", icon: <Activity size={18} />, id: "nav-health" },
+  { to: "/settings", label: "Settings", icon: <SettingsIcon size={18} />, id: "nav-settings" },
+];
+
+const renderItem = (item: NavItem) => (
+  <li key={item.to}>
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+      id={item.id}
+    >
+      {item.icon}
+      <span>{item.label}</span>
+    </NavLink>
+  </li>
+);
 
 export const Sidebar: React.FC = () => {
   return (
@@ -11,74 +55,23 @@ export const Sidebar: React.FC = () => {
         </div>
         <div>
           <div className="logo-title">ContractGuard</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Multi-Agent Platform</div>
+          <div className="logo-subtitle">Contract evidence review</div>
         </div>
       </div>
 
-      <nav style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-        <ul className="nav-links">
-          <li>
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              id="nav-overview"
-            >
-              <LayoutDashboard size={18} />
-              <span>Overview</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/audits"
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              id="nav-audits"
-            >
-              <FileSearch size={18} />
-              <span>Audit Queue</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/policies"
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              id="nav-policies"
-            >
-              <ShieldCheck size={18} />
-              <span>Policies</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/health"
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              id="nav-health"
-            >
-              <Activity size={18} />
-              <span>System Health</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/settings"
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
-              id="nav-settings"
-            >
-              <SettingsIcon size={18} />
-              <span>Settings</span>
-            </NavLink>
-          </li>
-        </ul>
-
-        <div className="sidebar-footer">
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Environment: <span style={{ color: "var(--accent-cyan)", fontWeight: 600 }}>Local Dev</span>
-          </div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-            v0.1.0 • Multi-Agent Ready
-          </div>
-        </div>
+      <nav className="sidebar-nav" aria-label="Primary navigation">
+        <div className="nav-section-label">Workspace</div>
+        <ul className="nav-links">{primaryNav.map(renderItem)}</ul>
+        <div className="nav-section-label">Platform</div>
+        <ul className="nav-links">{systemNav.map(renderItem)}</ul>
       </nav>
+
+      <div className="sidebar-footer">
+        <div className="sidebar-footer-line">
+          Environment: <span>Local Dev</span>
+        </div>
+        <div className="sidebar-footer-muted">v0.1.0 · Evidence-first review</div>
+      </div>
     </aside>
   );
 };

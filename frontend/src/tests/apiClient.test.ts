@@ -123,4 +123,22 @@ describe("ContractGuardApiClient", () => {
       expect.anything()
     );
   });
+
+  it("adds reviewer authentication headers to workflow list requests", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ runs: [], total: 0 }),
+    });
+
+    await client.listWorkflows({ documentId: "doc-1", limit: 10 });
+
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe(
+      "http://localhost:8000/api/v1/workflows?document_id=doc-1&limit=10&offset=0"
+    );
+    const headers = (init as RequestInit).headers as Headers;
+    expect(headers.get("X-Reviewer-ID")).toBe("local-reviewer");
+    expect(headers.get("X-Workflow-Key")).toBe("dev-workflow-review-key");
+  });
 });

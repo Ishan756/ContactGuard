@@ -142,6 +142,28 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
             event["event_type"] == "interrupted" for event in workflow["events"]
         )
 
+        listed = await async_client.get(
+            "/api/v1/workflows",
+            params={"document_id": document_id},
+            headers=review_headers(),
+        )
+        assert listed.status_code == 200, listed.text
+        listed_payload = listed.json()
+        assert listed_payload["total"] >= 1
+        assert any(
+            run["workflow_id"] == workflow_id for run in listed_payload["runs"]
+        )
+
+        foreign_list = await async_client.get(
+            "/api/v1/workflows",
+            headers=review_headers("reviewer-b"),
+        )
+        assert foreign_list.status_code == 200, foreign_list.text
+        assert all(
+            run["workflow_id"] != workflow_id
+            for run in foreign_list.json()["runs"]
+        )
+
         repeated = await async_client.post(
             "/api/v1/workflows",
             json={"document_id": document_id, "enable_model_analysis": False},

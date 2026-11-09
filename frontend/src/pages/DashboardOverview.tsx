@@ -1,239 +1,365 @@
-import React, { useEffect, useState } from "react";
-import { Card } from "../components/ui/Card";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
-import { apiClient } from "../services/apiClient";
-import type { ReadyHealthResponse } from "../types/api";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-  FileText,
   AlertTriangle,
-  Bot,
-  Zap,
   ArrowRight,
+  CheckCircle2,
+  Clock3,
+  FileSearch,
+  FileText,
   RefreshCw,
-  Cpu,
-  Layers,
-  Database,
+  ShieldCheck,
+  Upload,
 } from "lucide-react";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { ToneBadge, WorkflowStatusBadge } from "../components/ui/StatusBadge";
+import { EmptyState, ErrorState, LoadingState, Notice, PageHeader } from "../components/ui/States";
+import { apiClient, ApiClientError } from "../services/apiClient";
+import { getReviewerAuth } from "../services/session";
+import type {
+  DocumentMetadataResponse,
+  RiskPriority,
+  WorkflowRunResponse,
+  WorkflowStatus,
+} from "../types/api";
+import { formatBytes, formatRelative, severityTone, titleCase } from "../utils/format";
+
+const severityKeys: RiskPriority[] = ["critical", "high", "medium", "low", "informational"];
+const workflowKeys: WorkflowStatus[] = [
+  "awaiting_review",
+  "running",
+  "completed",
+  "failed",
+  "pending",
+  "revising",
+  "cancelled",
+];
 
 export const DashboardOverview: React.FC = () => {
-  const [health, setHealth] = useState<ReadyHealthResponse | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [documents, setDocuments] = useState<DocumentMetadataResponse[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowRunResponse[]>([]);
+  const [documentTotal, setDocumentTotal] = useState(0);
+  const [workflowTotal, setWorkflowTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
 
-  const fetchHealth = async () => {
-    setIsLoading(true);
-    try {
-      const resp = await apiClient.getReadyHealth();
-      setHealth(resp);
-    } catch {
-      setHealth(null);
-    } finally {
-      setIsLoading(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setWorkflowError(null);
+    const [documentsResult, workflowsResult] = await Promise.allSettled([
+      apiClient.listDocuments(12, 0),
+      apiClient.listWorkflows({ limit: 30 }),
+    ]);
+
+    if (documentsResult.status === "fulfilled") {
+      setDocuments(documentsResult.value.documents);
+      setDocumentTotal(documentsResult.value.total);
+    } else {
+      setError(
+        documentsResult.reason instanceof Error
+          ? documentsResult.reason.message
+          : "Unable to load contracts."
+      );
     }
-  };
+
+    if (workflowsResult.status === "fulfilled") {
+      setWorkflows(workflowsResult.value.runs);
+      setWorkflowTotal(workflowsResult.value.total);
+    } else {
+      setWorkflows([]);
+      setWorkflowTotal(0);
+      setWorkflowError(
+        workflowsResult.reason instanceof ApiClientError
+          ? workflowsResult.reason.message
+          : "Unable to load workflow runs."
+      );
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    fetchHealth();
-  }, []);
+    void load();
+  }, [load]);
+
+  const findings = useMemo(
+    () => workflows.flatMap((workflow) => workflow.review_report?.findings ?? []),
+    [workflows]
+  );
+
+  const severityCounts = useMemo(() => {
+    const counts = Object.fromEntries(severityKeys.map((key) => [key, 0])) as Record<
+      RiskPriority,
+      number
+    >;
+    findings.forEach((finding) => {
+      counts[finding.severity] = (counts[finding.severity] || 0) + 1;
+    });
+    return counts;
+  }, [findings]);
+
+  const totalFindings = findings.length;
+  const highRisk = severityCounts.critical + severityCounts.high;
+  const awaitingReview = workflows.filter((run) => run.status === "awaiting_review").length;
+  const verified = findings.filter((finding) => finding.validation_status === "verified").length;
+
+  const workflowCounts = useMemo(() => {
+    const counts = Object.fromEntries(workflowKeys.map((key) => [key, 0])) as Record<
+      WorkflowStatus,
+      number
+    >;
+    workflows.forEach((run) => {
+      counts[run.status] = (counts[run.status] || 0) + 1;
+    });
+    return counts;
+  }, [workflows]);
+
+  const recentRuns = workflows.slice(0, 6);
+  const recentDocuments = documents.slice(0, 6);
+  const auth = getReviewerAuth();
+
+  if (loading) {
+    return <LoadingState label="Loading dashboard…" />;
+  }
+
+  if (error && documents.length === 0) {
+    return <ErrorState title="Dashboard unavailable" message={error} onRetry={load} />;
+  }
 
   return (
     <div id="dashboard-overview-page">
-      {/* Metric Cards Row */}
-      <div className="grid-cols-4">
+      <PageHeader
+        eyebrow="Review operations"
+        title="Contract intelligence dashboard"
+        description="Track uploaded agreements, automated evidence verification, and human review queues across the workspace."
+        actions={
+          <>
+            <Link className="btn btn-secondary" to="/history">
+              Review history
+            </Link>
+            <Link className="btn btn-primary" to="/upload">
+              <Upload size={16} /> Upload contract
+            </Link>
+          </>
+        }
+      />
+
+      {!auth && (
+        <Notice tone="warning" title="Reviewer credentials required">
+          Configure a reviewer ID and workflow API key in <Link to="/settings">Settings</Link> to
+          start runs and action review queues.
+        </Notice>
+      )}
+      {workflowError && (
+        <Notice tone={auth ? "danger" : "warning"} title="Workflow data unavailable">
+          {workflowError}
+        </Notice>
+      )}
+
+      <div className="stat-grid">
         <Card id="stat-total-contracts">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 500 }}>
-              Contracts Audited
-            </span>
-            <div style={{ padding: "0.4rem", borderRadius: "var(--radius-sm)", background: "rgba(6, 182, 212, 0.15)" }}>
-              <FileText size={18} color="var(--accent-cyan)" />
+          <div className="stat-card">
+            <div>
+              <span className="stat-label">Uploaded contracts</span>
+              <div className="stat-value">{documentTotal}</div>
+              <span className="stat-note">Secure PDF and DOCX ingestion</span>
             </div>
-          </div>
-          <div style={{ fontSize: "1.85rem", fontWeight: 700, marginTop: "0.5rem" }}>0</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-            Foundation ready for ingestion
+            <span className="stat-icon stat-icon-cyan"><FileText size={20} /></span>
           </div>
         </Card>
-
+        <Card id="stat-awaiting-review">
+          <div className="stat-card">
+            <div>
+              <span className="stat-label">Awaiting review</span>
+              <div className="stat-value">{awaitingReview}</div>
+              <span className="stat-note">Human decisions pending</span>
+            </div>
+            <span className="stat-icon stat-icon-amber"><Clock3 size={20} /></span>
+          </div>
+        </Card>
         <Card id="stat-high-risks">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 500 }}>
-              High-Risk Flags
-            </span>
-            <div style={{ padding: "0.4rem", borderRadius: "var(--radius-sm)", background: "rgba(244, 63, 94, 0.15)" }}>
-              <AlertTriangle size={18} color="var(--accent-rose)" />
+          <div className="stat-card">
+            <div>
+              <span className="stat-label">High-risk findings</span>
+              <div className="stat-value">{highRisk}</div>
+              <span className="stat-note">Critical and high priority</span>
             </div>
-          </div>
-          <div style={{ fontSize: "1.85rem", fontWeight: 700, marginTop: "0.5rem" }}>0</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-            Clause risk rules initialized
+            <span className="stat-icon stat-icon-rose"><AlertTriangle size={20} /></span>
           </div>
         </Card>
-
-        <Card id="stat-agents">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 500 }}>
-              LangGraph Agents
-            </span>
-            <div style={{ padding: "0.4rem", borderRadius: "var(--radius-sm)", background: "rgba(139, 92, 246, 0.15)" }}>
-              <Bot size={18} color="var(--accent-violet)" />
+        <Card id="stat-verified">
+          <div className="stat-card">
+            <div>
+              <span className="stat-label">Verified evidence</span>
+              <div className="stat-value">{verified}</div>
+              <span className="stat-note">{totalFindings} findings across recent runs</span>
             </div>
-          </div>
-          <div style={{ fontSize: "1.85rem", fontWeight: 700, marginTop: "0.5rem" }}>3</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-            Legal, Financial & Compliance
-          </div>
-        </Card>
-
-        <Card id="stat-system-status">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 500 }}>
-              System Readiness
-            </span>
-            <div style={{ padding: "0.4rem", borderRadius: "var(--radius-sm)", background: "rgba(16, 185, 129, 0.15)" }}>
-              <Zap size={18} color="var(--accent-emerald)" />
-            </div>
-          </div>
-          <div style={{ marginTop: "0.5rem" }}>
-            <Badge status={health?.status === "healthy" ? "healthy" : "warning"}>
-              {health?.status || "Checking..."}
-            </Badge>
-          </div>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
-            Backend API online
+            <span className="stat-icon stat-icon-emerald"><ShieldCheck size={20} /></span>
           </div>
         </Card>
       </div>
 
-      {/* Main Grid: Multi-Agent Architecture & Quick Probe */}
-      <div className="grid-cols-2">
+      <div className="dashboard-grid">
         <Card
-          id="architecture-overview-card"
-          title="Multi-Agent Pipeline Architecture"
-          subtitle="ContractGuard Orchestration Framework"
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-              <div style={{ padding: "0.5rem", borderRadius: "var(--radius-md)", background: "rgba(6, 182, 212, 0.1)" }}>
-                <Layers size={20} color="var(--accent-cyan)" />
-              </div>
-              <div>
-                <h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>1. Ingestion & Document Parsing</h4>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
-                  PyMuPDF and python-docx parse incoming agreements, chunking clauses with semantic boundary detection.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-              <div style={{ padding: "0.5rem", borderRadius: "var(--radius-md)", background: "rgba(139, 92, 246, 0.1)" }}>
-                <Cpu size={20} color="var(--accent-violet)" />
-              </div>
-              <div>
-                <h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>2. LangGraph Multi-Agent Audit</h4>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
-                  Specialized agents (Compliance, Liability, Financial Exposure) critique clauses concurrently via Gemini.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-              <div style={{ padding: "0.5rem", borderRadius: "var(--radius-md)", background: "rgba(16, 185, 129, 0.1)" }}>
-                <Database size={20} color="var(--accent-emerald)" />
-              </div>
-              <div>
-                <h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>3. Vector Indexing & Synthesis</h4>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
-                  Clauses stored in Qdrant with risk scores and recommendations persisted in PostgreSQL.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card
-          id="system-probe-card"
-          title="Subsystem Health Probes"
-          subtitle="Real-time monitoring from /api/v1/health/ready"
+          title="Risk distribution"
+          subtitle="Severity across findings from recent workflow reports"
           action={
-            <Button
-              id="btn-refresh-health"
-              variant="secondary"
-              onClick={fetchHealth}
-              disabled={isLoading}
-              icon={<RefreshCw size={14} className={isLoading ? "spin" : ""} />}
-            >
+            <Button variant="secondary" onClick={load} icon={<RefreshCw size={14} />}>
               Refresh
             </Button>
           }
         >
-          {health ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {Object.entries(health.components).map(([name, comp]) => (
-                <div
-                  key={name}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "0.75rem",
-                    borderRadius: "var(--radius-md)",
-                    background: "rgba(255, 255, 255, 0.02)",
-                    border: "1px solid var(--border-subtle)",
-                  }}
+          {totalFindings === 0 ? (
+            <EmptyState
+              icon={<FileSearch size={26} />}
+              title="No findings yet"
+              description="Start a review workflow on an uploaded contract to populate risk distribution."
+              action={<Link className="text-link" to="/upload">Upload a contract →</Link>}
+            />
+          ) : (
+            <div className="distribution-list">
+              {severityKeys.map((severity) => {
+                const count = severityCounts[severity];
+                const percent = totalFindings ? (count / totalFindings) * 100 : 0;
+                return (
+                  <div className="distribution-row" key={severity}>
+                    <div className="distribution-label">
+                      <ToneBadge tone={severityTone(severity)}>{severity}</ToneBadge>
+                      <span>{count}</span>
+                    </div>
+                    <div className="distribution-track">
+                      <div
+                        className={`distribution-fill severity-fill-${severity}`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Workflow status" subtitle={`${workflowTotal} workflow runs tracked`}>
+          {workflows.length === 0 ? (
+            <EmptyState
+              icon={<Clock3 size={26} />}
+              title="No workflow runs"
+              description="Runs appear here after a contract review is started."
+            />
+          ) : (
+            <div className="status-grid">
+              {workflowKeys
+                .filter((status) => workflowCounts[status] > 0)
+                .map((status) => (
+                  <div className="status-tile" key={status}>
+                    <WorkflowStatusBadge status={status} />
+                    <strong>{workflowCounts[status]}</strong>
+                  </div>
+                ))}
+            </div>
+          )}
+          <div className="card-divider" />
+          <div className="insight-row">
+            <CheckCircle2 size={16} />
+            <span>
+              Automatic verification completed for{" "}
+              {workflows.filter((run) => run.validation_run_id).length} recent runs.
+            </span>
+          </div>
+        </Card>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid-wide">
+        <Card
+          title="Recent contracts"
+          subtitle="Latest uploaded agreements"
+          action={<Link className="text-link" to="/upload">Manage contracts →</Link>}
+        >
+          {recentDocuments.length === 0 ? (
+            <EmptyState
+              icon={<FileText size={26} />}
+              title="No contracts uploaded"
+              description="Upload a PDF or DOCX to begin the review pipeline."
+              action={<Link className="btn btn-primary" to="/upload">Upload contract</Link>}
+            />
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Contract</th>
+                    <th>Status</th>
+                    <th>Pages</th>
+                    <th>Size</th>
+                    <th>Uploaded</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentDocuments.map((document) => (
+                    <tr key={document.id}>
+                      <td>
+                        <div className="table-primary">{document.original_filename}</div>
+                        <div className="table-secondary">{document.total_characters.toLocaleString()} characters</div>
+                      </td>
+                      <td>
+                        <ToneBadge tone={document.status === "completed" ? "success" : document.status === "failed" ? "danger" : "warning"}>
+                          {document.status.replace(/_/g, " ")}
+                        </ToneBadge>
+                      </td>
+                      <td>{document.total_pages || "—"}</td>
+                      <td>{formatBytes(document.file_size_bytes)}</td>
+                      <td>{formatRelative(document.created_at)}</td>
+                      <td>
+                        <Link className="text-link" to={`/contracts/${document.id}/review`}>
+                          Review <ArrowRight size={14} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <Card
+          title="Recent workflow runs"
+          subtitle="Latest orchestration and review activity"
+          action={<Link className="text-link" to="/history">All runs →</Link>}
+        >
+          {recentRuns.length === 0 ? (
+            <EmptyState
+              icon={<FileSearch size={26} />}
+              title="No recent runs"
+              description="Workflow activity will appear here."
+            />
+          ) : (
+            <div className="run-list">
+              {recentRuns.map((run) => (
+                <Link
+                  className="run-list-item"
+                  key={run.workflow_id}
+                  to={`/contracts/${run.document_id}/review?workflow=${run.workflow_id}`}
                 >
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: "0.9rem", textTransform: "capitalize" }}>
-                      {name.replace(/_/g, " ")}
+                    <div className="table-primary">
+                      {run.review_report?.document_id ? titleCase(run.current_node || "workflow") : "Contract review"}
                     </div>
-                    {comp.details && (
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                        {comp.details}
-                      </div>
-                    )}
+                    <div className="table-secondary">
+                      Step {run.step_count} · {formatRelative(run.created_at)}
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    {comp.latency_ms !== undefined && comp.latency_ms !== null && (
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                        {comp.latency_ms.toFixed(1)}ms
-                      </span>
-                    )}
-                    <Badge status={comp.status}>{comp.status}</Badge>
-                  </div>
-                </div>
+                  <WorkflowStatusBadge status={run.status} />
+                </Link>
               ))}
-            </div>
-          ) : (
-            <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)" }}>
-              {isLoading ? "Querying health probes..." : "Unable to reach backend API. Ensure backend is running."}
             </div>
           )}
         </Card>
       </div>
-
-      {/* Contract Auditing Pipeline Queue Card */}
-      <Card
-        id="quick-start-card"
-        title="Audit Pipeline Ready"
-        subtitle="Monorepo foundation successfully initialized"
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-              The backend FastAPI service and React Vite frontend are fully scaffolded with structured logging,
-              request tracing, and environment-driven configurations.
-            </p>
-          </div>
-          <Button
-            id="btn-view-queue"
-            variant="primary"
-            onClick={() => window.location.href = "/audits"}
-            icon={<ArrowRight size={16} />}
-          >
-            Open Audit Queue
-          </Button>
-        </div>
-      </Card>
     </div>
   );
 };
