@@ -24,6 +24,9 @@ class DocumentMetadataResponse(BaseModel):
     original_filename: str = Field(..., description="Sanitized original document filename")
     file_size_bytes: int = Field(..., description="File size in bytes")
     mime_type: str = Field(..., description="MIME content type")
+    owner_reviewer_id: str | None = Field(
+        default=None, description="Reviewer that owns this document"
+    )
     file_hash_sha256: str = Field(..., description="SHA-256 integrity hash")
     status: DocumentStatus = Field(..., description="Current processing lifecycle status")
     error_message: str | None = Field(default=None, description="Diagnostic error or OCR guidance")

@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.services.vector.qdrant_service import QdrantVectorService, ScoredVectorMatch
+from tests.conftest import ADMIN_AUTH_HEADERS
 
 
 class InMemoryVectorStore:
@@ -97,7 +98,7 @@ def mock_qdrant_service(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_policy_and_retrieve_passages(async_client: AsyncClient):
+async def test_create_policy_and_retrieve_passages(auth_client: AsyncClient):
     """Test policy creation, automatic vector indexing, and semantic retrieval."""
     policy_payload = {
         "name": "Standard Vendor Liability Policy",
@@ -112,7 +113,9 @@ async def test_create_policy_and_retrieve_passages(async_client: AsyncClient):
         ),
     }
 
-    create_resp = await async_client.post("/api/v1/policies", json=policy_payload)
+    create_resp = await auth_client.post(
+        "/api/v1/policies", json=policy_payload, headers=ADMIN_AUTH_HEADERS
+    )
     assert create_resp.status_code == 201
     policy_data = create_resp.json()
     assert policy_data["name"] == "Standard Vendor Liability Policy"
@@ -125,7 +128,7 @@ async def test_create_policy_and_retrieve_passages(async_client: AsyncClient):
         "query": "The vendor proposes an unlimited liability cap for any breaches.",
         "limit": 3,
     }
-    search_resp = await async_client.post("/api/v1/policies/search", json=search_payload)
+    search_resp = await auth_client.post("/api/v1/policies/search", json=search_payload)
     assert search_resp.status_code == 200
     search_data = search_resp.json()
     assert search_data["total_results"] >= 1
@@ -136,13 +139,13 @@ async def test_create_policy_and_retrieve_passages(async_client: AsyncClient):
     assert "factual legal compliance" in top_hit["factual_confidence_note"].lower()
 
     # 2. Get policy by ID
-    get_resp = await async_client.get(f"/api/v1/policies/{policy_id}")
+    get_resp = await auth_client.get(f"/api/v1/policies/{policy_id}")
     assert get_resp.status_code == 200
     assert get_resp.json()["id"] == policy_id
 
 
 @pytest.mark.asyncio
-async def test_prevent_duplicate_policy_ingestion(async_client: AsyncClient):
+async def test_prevent_duplicate_policy_ingestion(auth_client: AsyncClient):
     """Test that creating a policy with identical name and version is rejected with 422."""
     policy_payload = {
         "name": "Duplicate Policy Test",
@@ -150,16 +153,20 @@ async def test_prevent_duplicate_policy_ingestion(async_client: AsyncClient):
         "category": "Compliance",
         "text_content": "Company data must remain stored in US geographic regions.",
     }
-    resp1 = await async_client.post("/api/v1/policies", json=policy_payload)
+    resp1 = await auth_client.post(
+        "/api/v1/policies", json=policy_payload, headers=ADMIN_AUTH_HEADERS
+    )
     assert resp1.status_code == 201
 
-    resp2 = await async_client.post("/api/v1/policies", json=policy_payload)
+    resp2 = await auth_client.post(
+        "/api/v1/policies", json=policy_payload, headers=ADMIN_AUTH_HEADERS
+    )
     assert resp2.status_code == 422
     assert "already exists" in resp2.json()["error"]["message"].lower()
 
 
 @pytest.mark.asyncio
-async def test_update_policy_clears_stale_vectors(async_client: AsyncClient):
+async def test_update_policy_clears_stale_vectors(auth_client: AsyncClient):
     """Test updating policy text re-indexes and removes old stale vectors."""
     initial = {
         "name": "Mutable IP Policy",
@@ -167,7 +174,9 @@ async def test_update_policy_clears_stale_vectors(async_client: AsyncClient):
         "category": "IP",
         "text_content": "Initial rule regarding patent rights transfer.",
     }
-    create_resp = await async_client.post("/api/v1/policies", json=initial)
+    create_resp = await auth_client.post(
+        "/api/v1/policies", json=initial, headers=ADMIN_AUTH_HEADERS
+    )
     policy_id = create_resp.json()["id"]
 
     # Update with new content
@@ -175,11 +184,15 @@ async def test_update_policy_clears_stale_vectors(async_client: AsyncClient):
         "name": "Mutable IP Policy",
         "text_content": "Revised rule: All trade secrets and copyright remain with Company.",
     }
-    put_resp = await async_client.put(f"/api/v1/policies/{policy_id}", json=update_payload)
+    put_resp = await auth_client.put(
+        f"/api/v1/policies/{policy_id}",
+        json=update_payload,
+        headers=ADMIN_AUTH_HEADERS,
+    )
     assert put_resp.status_code == 200
 
     # Search for trade secrets
-    search_resp = await async_client.post(
+    search_resp = await auth_client.post(
         "/api/v1/policies/search",
         json={"query": "trade secrets and copyrights", "policy_id": policy_id},
     )
@@ -190,25 +203,29 @@ async def test_update_policy_clears_stale_vectors(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_delete_policy_purges_vectors(async_client: AsyncClient):
+async def test_delete_policy_purges_vectors(auth_client: AsyncClient):
     """Test that deleting a policy removes it from database and clears Qdrant vectors."""
     payload = {
         "name": "Ephemeral Policy",
         "version": "1.0.0",
         "text_content": "Temporary guidelines on corporate travel reimbursements.",
     }
-    create_resp = await async_client.post("/api/v1/policies", json=payload)
+    create_resp = await auth_client.post(
+        "/api/v1/policies", json=payload, headers=ADMIN_AUTH_HEADERS
+    )
     policy_id = create_resp.json()["id"]
 
-    del_resp = await async_client.delete(f"/api/v1/policies/{policy_id}")
+    del_resp = await auth_client.delete(
+        f"/api/v1/policies/{policy_id}", headers=ADMIN_AUTH_HEADERS
+    )
     assert del_resp.status_code == 204
 
     # Confirm 404 on get
-    get_resp = await async_client.get(f"/api/v1/policies/{policy_id}")
+    get_resp = await auth_client.get(f"/api/v1/policies/{policy_id}")
     assert get_resp.status_code == 404
 
     # Confirm search returns 0 results for this policy_id
-    search_resp = await async_client.post(
+    search_resp = await auth_client.post(
         "/api/v1/policies/search",
         json={"query": "corporate travel reimbursements", "policy_id": policy_id},
     )
@@ -217,14 +234,14 @@ async def test_delete_policy_purges_vectors(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_empty_search_query_rejected(async_client: AsyncClient):
+async def test_empty_search_query_rejected(auth_client: AsyncClient):
     """Test that empty or whitespace query string is rejected with validation error."""
-    resp = await async_client.post("/api/v1/policies/search", json={"query": "   "})
+    resp = await auth_client.post("/api/v1/policies/search", json={"query": "   "})
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_upload_policy_from_docx_file(async_client: AsyncClient):
+async def test_upload_policy_from_docx_file(auth_client: AsyncClient):
     """Test uploading a company policy as a DOCX document, indexing sections into vector store."""
     doc = docx.Document()
     doc.add_heading("CORPORATE DATA RETENTION POLICY", level=0)
@@ -249,12 +266,17 @@ async def test_upload_policy_from_docx_file(async_client: AsyncClient):
         "description": "Retention timelines for customer PII",
     }
 
-    upload_resp = await async_client.post("/api/v1/policies/upload", data=data, files=files)
+    upload_resp = await auth_client.post(
+        "/api/v1/policies/upload",
+        data=data,
+        files=files,
+        headers=ADMIN_AUTH_HEADERS,
+    )
     assert upload_resp.status_code == 201
     pol_id = upload_resp.json()["id"]
 
     # Search against policy
-    search_resp = await async_client.post(
+    search_resp = await auth_client.post(
         "/api/v1/policies/search",
         json={"query": "How long can we retain personal customer data?", "policy_id": pol_id},
     )

@@ -34,6 +34,75 @@ class Settings(BaseSettings):
         default="development-secret-key-change-in-production-1234567890",
         description="Secret key for signing sessions/tokens",
     )
+    cors_allow_methods: list[str] = Field(
+        default=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        description="HTTP methods permitted by CORS",
+    )
+    cors_allow_headers: list[str] = Field(
+        default=[
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "Idempotency-Key",
+            "X-Request-ID",
+            "X-Reviewer-ID",
+            "X-Workflow-Key",
+        ],
+        description="Request headers permitted by CORS",
+    )
+    security_headers_enabled: bool = Field(
+        default=True,
+        description="Emit hardened HTTP security headers on every response",
+    )
+    hsts_max_age_seconds: int = Field(
+        default=31536000,
+        ge=0,
+        description="HSTS max-age in seconds; emitted only in production",
+    )
+
+    # Authentication & Authorization
+    admin_api_key: str = Field(
+        default="dev-admin-key-change-in-production",
+        description=(
+            "API key for administrative reviewers. Sent with X-Workflow-Key and grants "
+            "policy management plus access to all documents."
+        ),
+    )
+    workflow_review_api_key: str = Field(
+        default="dev-workflow-review-key",
+        description=(
+            "API key for reviewer access to documents, clauses, risk findings, comparisons, "
+            "and human-review workflows. Sent with X-Workflow-Key."
+        ),
+    )
+
+    # Abuse Protection & Request Timeouts
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="Enable per-client request rate limiting",
+    )
+    rate_limit_requests_per_minute: int = Field(
+        default=600,
+        ge=1,
+        description="Maximum requests per client IP per rate-limit window",
+    )
+    rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Rate-limit sliding window size in seconds",
+    )
+    request_timeout_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        description="Maximum wall-clock seconds for an HTTP request",
+    )
+    trust_proxy_headers: bool = Field(
+        default=False,
+        description=(
+            "Use X-Real-IP for rate limiting only when a trusted reverse proxy sets it "
+            "and the backend is not directly exposed to clients"
+        ),
+    )
 
     # PostgreSQL Database
     postgres_server: str = Field(default="localhost", description="PostgreSQL host")
@@ -46,6 +115,26 @@ class Settings(BaseSettings):
     database_url: str | None = Field(
         default=None,
         description="Full database URL (defaults to postgresql+asyncpg if not set)",
+    )
+    db_pool_size: int = Field(
+        default=10,
+        ge=1,
+        description="SQLAlchemy connection pool size for PostgreSQL",
+    )
+    db_max_overflow: int = Field(
+        default=20,
+        ge=0,
+        description="Maximum overflow connections above the PostgreSQL pool size",
+    )
+    db_pool_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Seconds to wait for a database connection from the pool",
+    )
+    db_pool_recycle_seconds: int = Field(
+        default=1800,
+        ge=0,
+        description="Recycle pooled database connections after this many seconds",
     )
 
     # Vector Database (Qdrant)
@@ -206,10 +295,6 @@ class Settings(BaseSettings):
     )
 
     # LangGraph Workflow Orchestration & Human Review
-    workflow_review_api_key: str = Field(
-        default="dev-workflow-review-key",
-        description="API key required to start, inspect, or resume human review workflows",
-    )
     workflow_max_retries: int = Field(
         default=2,
         ge=0,
@@ -278,10 +363,67 @@ class Settings(BaseSettings):
         default=["pdf", "docx"],
         description="Allowed contract file extensions",
     )
+    data_retention_days: int = Field(
+        default=365,
+        ge=1,
+        description="Documented retention period for uploaded contract and policy data",
+    )
+    audit_retention_days: int = Field(
+        default=2555,
+        ge=1,
+        description="Documented retention period for review decisions and audit events",
+    )
 
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in ("production", "prod")
+
+    def production_security_problems(self) -> list[str]:
+        """Return unsafe production settings that must block startup."""
+        problems: list[str] = []
+        if self.app_debug:
+            problems.append("APP_DEBUG must be false in production.")
+        if len(self.secret_key) < 32 or self.secret_key.startswith("development-"):
+            problems.append("SECRET_KEY must be a unique random value of at least 32 characters.")
+        if self.workflow_review_api_key.startswith("dev-") or len(
+            self.workflow_review_api_key
+        ) < 24:
+            problems.append("WORKFLOW_REVIEW_API_KEY must be a strong non-development value.")
+        if self.admin_api_key.startswith("dev-") or len(self.admin_api_key) < 24:
+            problems.append("ADMIN_API_KEY must be a strong non-development value.")
+        if self.admin_api_key == self.workflow_review_api_key:
+            problems.append("ADMIN_API_KEY and WORKFLOW_REVIEW_API_KEY must be different.")
+        if "*" in self.cors_origins:
+            problems.append("CORS_ORIGINS must not contain a wildcard in production.")
+        if any(not origin.startswith("https://") for origin in self.cors_origins):
+            problems.append("CORS_ORIGINS must use HTTPS origins in production.")
+        if not self.security_headers_enabled:
+            problems.append("SECURITY_HEADERS_ENABLED must be true in production.")
+        if not self.rate_limit_enabled:
+            problems.append("RATE_LIMIT_ENABLED must be true in production.")
+        effective_database_url = self.database_url or self.async_database_uri
+        uses_default_database_password = (
+            "postgres_secure_password" in self.database_url
+            if self.database_url
+            else self.postgres_password == "postgres_secure_password"
+        )
+        if uses_default_database_password:
+            problems.append(
+                "POSTGRES_PASSWORD/DATABASE_URL must not use the development default in production."
+            )
+        if effective_database_url.startswith("sqlite"):
+            problems.append("DATABASE_URL must not use SQLite in production.")
+        checkpoint_backend = self.workflow_checkpoint_backend.lower()
+        checkpoint_url = self.workflow_checkpoint_database_url
+        if checkpoint_backend in ("memory", "sqlite") or (
+            checkpoint_backend == "auto"
+            and checkpoint_url is not None
+            and not checkpoint_url.startswith(("postgresql://", "postgresql+asyncpg://"))
+        ):
+            problems.append(
+                "WORKFLOW_CHECKPOINT_BACKEND must use PostgreSQL in production."
+            )
+        return problems
 
     @property
     def async_database_uri(self) -> str:

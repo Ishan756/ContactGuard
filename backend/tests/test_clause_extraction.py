@@ -39,7 +39,7 @@ def create_contract_docx(paragraphs: list[tuple[str, str]]) -> bytes:
 
 
 async def upload_contract(
-    async_client: AsyncClient, paragraphs: list[tuple[str, str]]
+    auth_client: AsyncClient, paragraphs: list[tuple[str, str]]
 ) -> str:
     files = {
         "file": (
@@ -48,13 +48,13 @@ async def upload_contract(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     }
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201, response.text
     return response.json()["document"]["id"]
 
 
-async def reconstruct_document_text(async_client: AsyncClient, document_id: str) -> str:
-    response = await async_client.get(
+async def reconstruct_document_text(auth_client: AsyncClient, document_id: str) -> str:
+    response = await auth_client.get(
         f"/api/v1/documents/{document_id}/chunks?page=1&page_size=100"
     )
     assert response.status_code == 200
@@ -66,9 +66,9 @@ def use_mock_provider(provider: MockLLMProvider) -> None:
 
 
 @pytest.mark.asyncio
-async def test_valid_clause_extraction_with_exact_citation(async_client: AsyncClient):
+async def test_valid_clause_extraction_with_exact_citation(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -96,7 +96,7 @@ async def test_valid_clause_extraction_with_exact_citation(async_client: AsyncCl
     )
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -120,19 +120,19 @@ async def test_valid_clause_extraction_with_exact_citation(async_client: AsyncCl
     assert "risk_score" not in clause
     assert provider.calls and "untrusted" in provider.calls[0]["system_instruction"].lower()
 
-    full_text = await reconstruct_document_text(async_client, document_id)
+    full_text = await reconstruct_document_text(auth_client, document_id)
     assert (
         full_text[clause["start_char_offset"] : clause["end_char_offset"]]
         == CONFIDENTIALITY_TEXT
     )
 
-    list_response = await async_client.get(
+    list_response = await auth_client.get(
         f"/api/v1/documents/{document_id}/clauses?category=confidentiality"
     )
     assert list_response.status_code == 200
     assert list_response.json()["total"] == 1
 
-    single_response = await async_client.get(
+    single_response = await auth_client.get(
         f"/api/v1/documents/{document_id}/clauses/{clause['clause_id']}"
     )
     assert single_response.status_code == 200
@@ -140,9 +140,9 @@ async def test_valid_clause_extraction_with_exact_citation(async_client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_malformed_model_response_is_handled_safely(async_client: AsyncClient):
+async def test_malformed_model_response_is_handled_safely(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -152,7 +152,7 @@ async def test_malformed_model_response_is_handled_safely(async_client: AsyncCli
     provider = MockLLMProvider(["this is not valid JSON"])
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -165,9 +165,9 @@ async def test_malformed_model_response_is_handled_safely(async_client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_missing_citation_is_rejected(async_client: AsyncClient):
+async def test_missing_citation_is_rejected(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -191,7 +191,7 @@ async def test_missing_citation_is_rejected(async_client: AsyncClient):
     )
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -205,9 +205,9 @@ async def test_missing_citation_is_rejected(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_incomplete_candidate_is_flagged_for_review(async_client: AsyncClient):
+async def test_incomplete_candidate_is_flagged_for_review(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -228,7 +228,7 @@ async def test_incomplete_candidate_is_flagged_for_review(async_client: AsyncCli
     )
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -244,9 +244,9 @@ async def test_incomplete_candidate_is_flagged_for_review(async_client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_duplicate_clause_candidates_are_merged(async_client: AsyncClient):
+async def test_duplicate_clause_candidates_are_merged(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -265,7 +265,7 @@ async def test_duplicate_clause_candidates_are_merged(async_client: AsyncClient)
     )
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -279,13 +279,13 @@ async def test_duplicate_clause_candidates_are_merged(async_client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_long_document_is_split_into_overlapping_chunks(async_client: AsyncClient):
+async def test_long_document_is_split_into_overlapping_chunks(auth_client: AsyncClient):
     long_text = " ".join(
         f"Clause sentence {index}: the parties agree to the stated obligation."
         for index in range(80)
     )
     document_id = await upload_contract(
-        async_client, [("paragraph", long_text)]
+        auth_client, [("paragraph", long_text)]
     )
 
     first_sentence = "Clause sentence 0: the parties agree to the stated obligation."
@@ -313,7 +313,7 @@ async def test_long_document_is_split_into_overlapping_chunks(async_client: Asyn
     service = ClauseExtractionService(llm_provider=provider, settings=settings)
     app.dependency_overrides[get_clause_extraction_service] = lambda: service
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -326,9 +326,9 @@ async def test_long_document_is_split_into_overlapping_chunks(async_client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_provider_timeout_marks_run_failed(async_client: AsyncClient):
+async def test_provider_timeout_marks_run_failed(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -338,13 +338,13 @@ async def test_provider_timeout_marks_run_failed(async_client: AsyncClient):
     provider = MockLLMProvider([ProviderTimeoutError("simulated provider timeout")])
     use_mock_provider(provider)
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 504
     assert response.json()["error"]["code"] == "LLM_TIMEOUT"
 
-    runs_response = await async_client.get(
+    runs_response = await auth_client.get(
         f"/api/v1/documents/{document_id}/extraction-runs"
     )
     assert runs_response.status_code == 200
@@ -355,9 +355,9 @@ async def test_provider_timeout_marks_run_failed(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_extraction_endpoint_reports_missing_credentials(async_client: AsyncClient):
+async def test_extraction_endpoint_reports_missing_credentials(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "ARTICLE 1. CONFIDENTIALITY"),
             ("paragraph", CONFIDENTIALITY_TEXT),
@@ -371,7 +371,7 @@ async def test_extraction_endpoint_reports_missing_credentials(async_client: Asy
 
     app.dependency_overrides[get_llm_provider] = raise_configuration_error
 
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 503

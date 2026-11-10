@@ -59,18 +59,22 @@ entire source document.
 - Development fallback: in-memory checkpointer only if a persistent backend cannot be
   initialized and `APP_ENV` is not production.
 
-Set `WORKFLOW_CHECKPOINT_BACKEND=auto|postgres|sqlite|memory`. Production should use
-PostgreSQL. In-memory checkpoints do not survive a process restart.
+Set `WORKFLOW_CHECKPOINT_BACKEND=auto|postgres|sqlite|memory`. Production requires
+PostgreSQL; startup rejects memory/SQLite checkpoint backends. In-memory checkpoints do
+not survive a process restart.
 
 ## API
 
 All workflow endpoints require:
 
 - `X-Reviewer-ID`: stable reviewer identity.
-- `X-Workflow-Key`: shared workflow API key (`WORKFLOW_REVIEW_API_KEY`).
+- `X-Workflow-Key`: either `WORKFLOW_REVIEW_API_KEY` (owner-scoped) or `ADMIN_API_KEY`
+  (administrative, cross-reviewer access).
 
-Workflow ownership is enforced: only the reviewer who started a workflow can inspect,
-retrieve results, or resume it. Start/status/results/resume are owner-authorized.
+Workflow ownership is enforced: reviewers can start reviews only for documents they own,
+and only the reviewer who started a workflow can inspect, retrieve results, or resume it.
+Administrative keys may access all reviewer records. Start/status/results/resume are
+owner-authorized for reviewer keys.
 
 | Endpoint | Method | Purpose |
 |---|---|---|

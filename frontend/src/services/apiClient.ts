@@ -165,17 +165,28 @@ export class ContractGuardApiClient {
     return this.request<DocumentUploadResponse>("/api/v1/documents", {
       method: "POST",
       body: formData,
+      auth: "reviewer",
     });
   }
 
   public async listDocuments(limit: number = 20, offset: number = 0): Promise<DocumentListResponse> {
     return this.request<DocumentListResponse>(
-      `/api/v1/documents${queryString({ limit, offset })}`
+      `/api/v1/documents${queryString({ limit, offset })}`,
+      { auth: "reviewer" }
     );
   }
 
+  public async deleteDocument(id: string): Promise<void> {
+    return this.request<void>(`/api/v1/documents/${id}`, {
+      method: "DELETE",
+      auth: "reviewer",
+    });
+  }
+
   public async getDocument(id: string): Promise<DocumentMetadataResponse> {
-    return this.request<DocumentMetadataResponse>(`/api/v1/documents/${id}`);
+    return this.request<DocumentMetadataResponse>(`/api/v1/documents/${id}`, {
+      auth: "reviewer",
+    });
   }
 
   public async getDocumentChunks(
@@ -184,13 +195,15 @@ export class ContractGuardApiClient {
     pageSize: number = 20
   ): Promise<DocumentTextResponse> {
     return this.request<DocumentTextResponse>(
-      `/api/v1/documents/${id}/chunks${queryString({ page, page_size: pageSize })}`
+      `/api/v1/documents/${id}/chunks${queryString({ page, page_size: pageSize })}`,
+      { auth: "reviewer" }
     );
   }
 
   public async listClauses(documentId: string, limit: number = 200): Promise<ClauseListResponse> {
     return this.request<ClauseListResponse>(
-      `/api/v1/documents/${documentId}/clauses${queryString({ limit })}`
+      `/api/v1/documents/${documentId}/clauses${queryString({ limit })}`,
+      { auth: "reviewer" }
     );
   }
 
@@ -211,13 +224,15 @@ export class ContractGuardApiClient {
         category: params.category,
         limit: params.limit ?? 500,
         offset: params.offset ?? 0,
-      })}`
+      })}`,
+      { auth: "reviewer" }
     );
   }
 
   public async getFinding(documentId: string, findingId: string): Promise<RiskFindingResponse> {
     return this.request<RiskFindingResponse>(
-      `/api/v1/documents/${documentId}/findings/${findingId}`
+      `/api/v1/documents/${documentId}/findings/${findingId}`,
+      { auth: "reviewer" }
     );
   }
 
@@ -232,7 +247,8 @@ export class ContractGuardApiClient {
         offset,
         category: filters.category,
         status: filters.status,
-      })}`
+      })}`,
+      { auth: "reviewer" }
     );
   }
 
@@ -240,6 +256,7 @@ export class ContractGuardApiClient {
     return this.request<PolicyResponse>("/api/v1/policies", {
       method: "POST",
       body: JSON.stringify(request),
+      auth: "reviewer",
     });
   }
 
@@ -260,6 +277,7 @@ export class ContractGuardApiClient {
     return this.request<PolicyResponse>("/api/v1/policies/upload", {
       method: "POST",
       body: formData,
+      auth: "reviewer",
     });
   }
 
@@ -275,6 +293,7 @@ export class ContractGuardApiClient {
         category: category || null,
         limit,
       }),
+      auth: "reviewer",
     });
   }
 
@@ -341,7 +360,8 @@ export class ContractGuardApiClient {
         document_id: params.documentId,
         limit: params.limit ?? 20,
         offset: params.offset ?? 0,
-      })}`
+      })}`,
+      { auth: "reviewer" }
     );
   }
 
@@ -356,7 +376,10 @@ export class ContractGuardApiClient {
   }
 
   public async getComparison(comparisonId: string): Promise<ContractComparisonResponse> {
-    return this.request<ContractComparisonResponse>(`/api/v1/comparisons/${comparisonId}`);
+    return this.request<ContractComparisonResponse>(
+      `/api/v1/comparisons/${comparisonId}`,
+      { auth: "reviewer" }
+    );
   }
 
   public async getEvaluationSummary(): Promise<EvaluationSummaryResponse> {

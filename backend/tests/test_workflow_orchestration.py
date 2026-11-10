@@ -76,15 +76,15 @@ def review_headers(reviewer_id: str = "reviewer-a") -> dict[str, str]:
     }
 
 
-async def prepare_contract(async_client: AsyncClient) -> str:
+async def prepare_contract(auth_client: AsyncClient) -> str:
     await create_policy(
-        async_client,
+        auth_client,
         "Vendor Liability Policy",
         LIABILITY_POLICY,
         category="liability",
     )
     return await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "1. LIMITATION OF LIABILITY"),
             ("paragraph", LIABILITY_UNLIMITED),
@@ -111,9 +111,9 @@ def extraction_llm() -> MockLLMProvider:
 
 @pytest.mark.asyncio
 async def test_workflow_pauses_for_approval_and_resumes_idempotently(
-    async_client: AsyncClient, tmp_path: Path
+    auth_client: AsyncClient, tmp_path: Path
 ):
-    document_id = await prepare_contract(async_client)
+    document_id = await prepare_contract(auth_client)
     settings = get_settings()
     manager = CheckpointManager(
         settings,
@@ -125,7 +125,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
     app.dependency_overrides[get_workflow_service] = lambda: service
     try:
         start_headers = {**review_headers(), "Idempotency-Key": "start-approval-1"}
-        response = await async_client.post(
+        response = await auth_client.post(
             "/api/v1/workflows",
             json={"document_id": document_id, "enable_model_analysis": False},
             headers=start_headers,
@@ -142,7 +142,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
             event["event_type"] == "interrupted" for event in workflow["events"]
         )
 
-        listed = await async_client.get(
+        listed = await auth_client.get(
             "/api/v1/workflows",
             params={"document_id": document_id},
             headers=review_headers(),
@@ -154,7 +154,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
             run["workflow_id"] == workflow_id for run in listed_payload["runs"]
         )
 
-        foreign_list = await async_client.get(
+        foreign_list = await auth_client.get(
             "/api/v1/workflows",
             headers=review_headers("reviewer-b"),
         )
@@ -164,7 +164,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
             for run in foreign_list.json()["runs"]
         )
 
-        repeated = await async_client.post(
+        repeated = await auth_client.post(
             "/api/v1/workflows",
             json={"document_id": document_id, "enable_model_analysis": False},
             headers=start_headers,
@@ -172,7 +172,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
         assert repeated.status_code == 201, repeated.text
         assert repeated.json()["workflow_id"] == workflow_id
 
-        foreign = await async_client.post(
+        foreign = await auth_client.post(
             f"/api/v1/workflows/{workflow_id}/resume",
             json={"decision": "approve"},
             headers=review_headers("reviewer-b"),
@@ -184,7 +184,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
             "Idempotency-Key": "resume-approval-1",
         }
         body = {"decision": "approve", "notes": "Reviewed the liability deviation."}
-        resumed = await async_client.post(
+        resumed = await auth_client.post(
             f"/api/v1/workflows/{workflow_id}/resume",
             json=body,
             headers=resume_headers,
@@ -197,7 +197,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
         assert completed["decisions"][-1]["notes"] == "Reviewed the liability deviation."
         assert any(event["event_type"] == "completed" for event in completed["events"])
 
-        duplicate = await async_client.post(
+        duplicate = await auth_client.post(
             f"/api/v1/workflows/{workflow_id}/resume",
             json=body,
             headers=resume_headers,
@@ -205,7 +205,7 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
         assert duplicate.status_code == 200, duplicate.text
         assert len(duplicate.json()["decisions"]) == 1
 
-        results = await async_client.get(
+        results = await auth_client.get(
             f"/api/v1/workflows/{workflow_id}/results",
             headers=review_headers(),
         )
@@ -223,9 +223,9 @@ async def test_workflow_pauses_for_approval_and_resumes_idempotently(
 
 @pytest.mark.asyncio
 async def test_workflow_revision_appends_audit_trail_and_pauses_again(
-    async_client: AsyncClient, tmp_path: Path
+    auth_client: AsyncClient, tmp_path: Path
 ):
-    document_id = await prepare_contract(async_client)
+    document_id = await prepare_contract(auth_client)
     settings = get_settings()
     manager = CheckpointManager(
         settings,
@@ -235,7 +235,7 @@ async def test_workflow_revision_appends_audit_trail_and_pauses_again(
     service = build_workflow_service(manager.saver, extraction_llm())
     app.dependency_overrides[get_workflow_service] = lambda: service
     try:
-        started = await async_client.post(
+        started = await auth_client.post(
             "/api/v1/workflows",
             json={"document_id": document_id, "enable_model_analysis": False},
             headers=review_headers(),
@@ -243,7 +243,7 @@ async def test_workflow_revision_appends_audit_trail_and_pauses_again(
         assert started.status_code == 201, started.text
         workflow_id = started.json()["workflow_id"]
 
-        revised = await async_client.post(
+        revised = await auth_client.post(
             f"/api/v1/workflows/{workflow_id}/resume",
             json={
                 "decision": "request_revision",
@@ -262,7 +262,7 @@ async def test_workflow_revision_appends_audit_trail_and_pauses_again(
         assert after_revision["decisions"][0]["decision"] == "request_revision"
         assert after_revision["decisions"][0]["revision_instructions"]
 
-        approved = await async_client.post(
+        approved = await auth_client.post(
             f"/api/v1/workflows/{workflow_id}/resume",
             json={"decision": "approve", "notes": "Revision reviewed."},
             headers={**review_headers(), "Idempotency-Key": "approve-after-revision"},
@@ -282,9 +282,9 @@ async def test_workflow_revision_appends_audit_trail_and_pauses_again(
 
 @pytest.mark.asyncio
 async def test_workflow_resume_survives_simulated_process_restart(
-    async_client: AsyncClient, tmp_path: Path
+    auth_client: AsyncClient, tmp_path: Path
 ):
-    document_id = await prepare_contract(async_client)
+    document_id = await prepare_contract(auth_client)
     settings = get_settings()
     checkpoint_path = str(tmp_path / "workflow-restart.db")
     principal = ReviewerPrincipal(reviewer_id="reviewer-a")
@@ -343,10 +343,10 @@ async def test_workflow_requires_authentication(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_missing_policy_evidence_pauses_for_human_review(
-    async_client: AsyncClient, tmp_path: Path
+    auth_client: AsyncClient, tmp_path: Path
 ):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "5. INDEMNITY"),
             (
@@ -374,7 +374,7 @@ async def test_missing_policy_evidence_pauses_for_human_review(
     service = build_workflow_service(manager.saver, llm)
     app.dependency_overrides[get_workflow_service] = lambda: service
     try:
-        response = await async_client.post(
+        response = await auth_client.post(
             "/api/v1/workflows",
             json={
                 "document_id": document_id,
@@ -396,16 +396,16 @@ async def test_missing_policy_evidence_pauses_for_human_review(
 
 @pytest.mark.asyncio
 async def test_workflow_step_limit_fails_without_human_approval(
-    async_client: AsyncClient, tmp_path: Path
+    auth_client: AsyncClient, tmp_path: Path
 ):
-    document_id = await prepare_contract(async_client)
+    document_id = await prepare_contract(auth_client)
     settings = get_settings()
     manager = CheckpointManager(settings, backend="memory")
     await manager.start()
     service = build_workflow_service(manager.saver, extraction_llm())
     app.dependency_overrides[get_workflow_service] = lambda: service
     try:
-        response = await async_client.post(
+        response = await auth_client.post(
             "/api/v1/workflows",
             json={
                 "document_id": document_id,

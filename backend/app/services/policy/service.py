@@ -178,6 +178,7 @@ class PolicyService:
         description: str | None,
         file: UploadFile,
         db: AsyncSession,
+        owner_reviewer_id: str | None = None,
     ) -> Policy:
         """Upload a PDF or DOCX file as a policy, reusing secure ingestion and extracting text."""
         stmt = select(Policy).where(Policy.name == name, Policy.version == version)
@@ -192,7 +193,11 @@ class PolicyService:
         # Ingest file using DocumentIngestionService
         storage = get_storage_backend()
         ingestion = DocumentIngestionService(storage=storage, settings=self.settings)
-        doc = await ingestion.ingest_document(upload_file=file, db=db)
+        doc = await ingestion.ingest_document(
+            upload_file=file,
+            db=db,
+            owner_reviewer_id=owner_reviewer_id,
+        )
 
         if doc.status == "failed":
             raise AppException(f"Failed to parse policy document: {doc.error_message}", code="INGESTION_FAILED")

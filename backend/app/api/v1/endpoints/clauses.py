@@ -4,9 +4,11 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.authorization import require_document_access
 from app.core.config import Settings, get_settings
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import get_llm_provider
+from app.core.security import ReviewerPrincipal, require_reviewer
 from app.db.models import (
     Clause,
     ClauseExtractionRun,
@@ -101,9 +103,11 @@ def map_run_response(run: ClauseExtractionRun) -> ExtractionRunResponse:
 )
 async def extract_clauses(
     document_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ClauseExtractionService = Depends(get_clause_extraction_service),
 ) -> ClauseExtractionResponse:
+    await require_document_access(document_id, db, principal)
     run, clauses = await service.extract_clauses(document_id=document_id, db=db)
     return ClauseExtractionResponse(
         document_id=document_id,
@@ -125,9 +129,11 @@ async def list_clauses(
     ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ClauseExtractionService = Depends(get_clause_extraction_service),
 ) -> ClauseListResponse:
+    await require_document_access(document_id, db, principal)
     clauses, total = await service.list_clauses(
         document_id=document_id,
         db=db,
@@ -151,9 +157,11 @@ async def list_clauses(
 async def get_clause(
     document_id: str,
     clause_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ClauseExtractionService = Depends(get_clause_extraction_service),
 ) -> ClauseResponse:
+    await require_document_access(document_id, db, principal)
     clause = await service.get_clause(document_id=document_id, clause_id=clause_id, db=db)
     return map_clause_response(clause)
 
@@ -167,9 +175,11 @@ async def list_extraction_runs(
     document_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ClauseExtractionService = Depends(get_clause_extraction_service),
 ) -> ExtractionRunListResponse:
+    await require_document_access(document_id, db, principal)
     runs, total = await service.list_runs(
         document_id=document_id, db=db, limit=limit, offset=offset
     )

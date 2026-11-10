@@ -49,10 +49,13 @@ class DocumentIngestionService:
         self,
         upload_file: UploadFile,
         db: AsyncSession,
+        owner_reviewer_id: str | None = None,
     ) -> Document:
         """Perform comprehensive document ingestion, validation, storage, and extraction."""
         original_name = upload_file.filename or "unknown_document"
         sanitized_name = self.sanitize_filename(original_name)
+        if len(sanitized_name) > 255:
+            raise ValidationError("Filename is too long (maximum 255 characters).")
 
         # 1. Extension Check
         extension = Path(sanitized_name).suffix.lstrip(".").lower()
@@ -61,9 +64,9 @@ class DocumentIngestionService:
                 f"Unsupported file format '{extension}'. Allowed formats: {', '.join(self.settings.allowed_extensions)}"
             )
 
-        # 2. Read content safely with size limit checking
+        # 2. Read content safely with a hard upper bound before buffering
         max_bytes = self.settings.max_upload_size_mb * 1024 * 1024
-        content = await upload_file.read()
+        content = await upload_file.read(max_bytes + 1)
 
         # 3. Empty Document Check
         if not content or len(content) == 0:
@@ -72,7 +75,7 @@ class DocumentIngestionService:
         # 4. File Size Check
         if len(content) > max_bytes:
             raise AppException(
-                f"File size ({len(content) / (1024 * 1024):.2f}MB) exceeds maximum allowed limit of {self.settings.max_upload_size_mb}MB.",
+                f"File size exceeds the maximum allowed limit of {self.settings.max_upload_size_mb}MB.",
                 code="FILE_TOO_LARGE",
                 status_code=413,
             )
@@ -111,6 +114,7 @@ class DocumentIngestionService:
             file_size_bytes=len(content),
             mime_type=mime_type,
             file_hash_sha256=sha256_hash,
+            owner_reviewer_id=owner_reviewer_id,
             status=DocumentStatus.PROCESSING,
             total_pages=0,
             total_characters=0,

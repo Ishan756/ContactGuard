@@ -23,7 +23,9 @@ COPY backend/app /app/app
 COPY backend/pyproject.toml /app/pyproject.toml
 
 # Create a non-privileged user for security
-RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+RUN useradd -m -u 1001 appuser && \
+    mkdir -p /app/data/uploads && \
+    chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000

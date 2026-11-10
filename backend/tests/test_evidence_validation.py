@@ -33,27 +33,27 @@ def mock_qdrant_service(monkeypatch):
     monkeypatch.setattr(QdrantVectorService, "search", in_memory.search)
 
 
-async def create_liability_analysis(async_client: AsyncClient) -> dict:
+async def create_liability_analysis(auth_client: AsyncClient) -> dict:
     await create_policy(
-        async_client,
+        auth_client,
         "Vendor Liability Policy",
         LIABILITY_POLICY,
         category="liability",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "1. LIMITATION OF LIABILITY"),
             ("paragraph", LIABILITY_UNLIMITED),
         ],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("liability", LIABILITY_UNLIMITED, "Unlimited vendor liability.")],
     )
-    await retrieve_policies(async_client, document_id)
-    return await analyze_risk(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
+    return await analyze_risk(auth_client, document_id)
 
 
 async def tamper_finding(db_session, analysis_run_id: str, **fields) -> str:
@@ -74,12 +74,12 @@ async def tamper_finding(db_session, analysis_run_id: str, **fields) -> str:
 
 
 async def validate_findings(
-    async_client: AsyncClient,
+    auth_client: AsyncClient,
     document_id: str,
     analysis_run_id: str,
     max_retries: int = 0,
 ) -> dict:
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/validate-findings",
         json={"analysis_run_id": analysis_run_id, "max_retries": max_retries},
     )
@@ -88,8 +88,8 @@ async def validate_findings(
 
 
 @pytest.mark.asyncio
-async def test_supported_finding_is_independently_verified(async_client: AsyncClient):
-    analysis = await create_liability_analysis(async_client)
+async def test_supported_finding_is_independently_verified(auth_client: AsyncClient):
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     finding = next(
         item for item in analysis["findings"] if item["rule_id"] == "liability_unlimited"
@@ -101,13 +101,13 @@ async def test_supported_finding_is_independently_verified(async_client: AsyncCl
     assert finding["last_validated_at"]
     assert finding["contract_page_number"] == 1
 
-    runs = await async_client.get(
+    runs = await auth_client.get(
         f"/api/v1/documents/{document_id}/validation-runs"
     )
     assert runs.status_code == 200
     assert runs.json()["total"] >= 1
 
-    detail = await async_client.get(
+    detail = await auth_client.get(
         f"/api/v1/documents/{document_id}/validation-runs/"
         f"{runs.json()['runs'][0]['validation_run_id']}"
     )
@@ -120,9 +120,9 @@ async def test_supported_finding_is_independently_verified(async_client: AsyncCl
 
 @pytest.mark.asyncio
 async def test_fabricated_contract_quote_is_unverified(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(
@@ -131,7 +131,7 @@ async def test_fabricated_contract_quote_is_unverified(
         contract_quote="This sentence was never present in the contract.",
     )
 
-    validation = await validate_findings(async_client, document_id, run_id)
+    validation = await validate_findings(auth_client, document_id, run_id)
     finding = next(item for item in validation["findings"] if item["rule_id"] == "liability_unlimited")
     assert finding["validation_status"] == "unverified"
     assert "contract_quote_not_found" in finding["validation_error_categories"]
@@ -142,14 +142,14 @@ async def test_fabricated_contract_quote_is_unverified(
 
 @pytest.mark.asyncio
 async def test_mismatched_page_number_is_detected(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(db_session, run_id, contract_page_number=99)
 
-    validation = await validate_findings(async_client, document_id, run_id)
+    validation = await validate_findings(auth_client, document_id, run_id)
     finding = next(item for item in validation["findings"] if item["rule_id"] == "liability_unlimited")
     assert finding["validation_status"] == "unverified"
     assert "page_number_mismatch" in finding["validation_error_categories"]
@@ -157,14 +157,14 @@ async def test_mismatched_page_number_is_detected(
 
 @pytest.mark.asyncio
 async def test_wrong_policy_version_is_detected(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(db_session, run_id, policy_version="9.9.9")
 
-    validation = await validate_findings(async_client, document_id, run_id)
+    validation = await validate_findings(auth_client, document_id, run_id)
     finding = next(item for item in validation["findings"] if item["rule_id"] == "liability_unlimited")
     assert finding["validation_status"] == "unverified"
     assert "policy_version_mismatch" in finding["validation_error_categories"]
@@ -172,9 +172,9 @@ async def test_wrong_policy_version_is_detected(
 
 @pytest.mark.asyncio
 async def test_unsupported_explanation_is_detected(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(
@@ -183,7 +183,7 @@ async def test_unsupported_explanation_is_detected(
         explanation="A purple elephant owns the moon and all of its craters.",
     )
 
-    validation = await validate_findings(async_client, document_id, run_id)
+    validation = await validate_findings(auth_client, document_id, run_id)
     finding = next(item for item in validation["findings"] if item["rule_id"] == "liability_unlimited")
     assert finding["validation_status"] == "unverified"
     assert "unsupported_explanation" in finding["validation_error_categories"]
@@ -191,15 +191,15 @@ async def test_unsupported_explanation_is_detected(
 
 @pytest.mark.asyncio
 async def test_severity_correction_retry_succeeds(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(db_session, run_id, severity="low")
 
     validation = await validate_findings(
-        async_client, document_id, run_id, max_retries=2
+        auth_client, document_id, run_id, max_retries=2
     )
     finding = next(item for item in validation["findings"] if item["rule_id"] == "liability_unlimited")
     assert finding["severity"] == "critical"
@@ -220,9 +220,9 @@ class TimeoutRetryHandler:
 
 @pytest.mark.asyncio
 async def test_retry_timeouts_are_bounded_and_never_approve(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     await tamper_finding(
@@ -254,10 +254,10 @@ async def test_retry_timeouts_are_bounded_and_never_approve(
 
 @pytest.mark.asyncio
 async def test_missing_evidence_is_a_distinct_non_approved_outcome(
-    async_client: AsyncClient,
+    auth_client: AsyncClient,
 ):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "5. INDEMNITY"),
             (
@@ -267,7 +267,7 @@ async def test_missing_evidence_is_a_distinct_non_approved_outcome(
         ],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [
             clause_candidate(
@@ -277,15 +277,15 @@ async def test_missing_evidence_is_a_distinct_non_approved_outcome(
             )
         ],
     )
-    await retrieve_policies(async_client, document_id)
-    analysis = await analyze_risk(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
     finding = next(
         item for item in analysis["findings"] if item["finding_type"] == "missing_evidence"
     )
     assert finding["validation_status"] == "missing_evidence"
     assert finding["review_status"] == "needs_review"
 
-    runs = await async_client.get(
+    runs = await auth_client.get(
         f"/api/v1/documents/{document_id}/validation-runs"
     )
     assert runs.json()["runs"][0]["missing_evidence_count"] == 1
@@ -294,9 +294,9 @@ async def test_missing_evidence_is_a_distinct_non_approved_outcome(
 
 @pytest.mark.asyncio
 async def test_duplicate_findings_are_flagged_not_verified(
-    async_client: AsyncClient, db_session
+    auth_client: AsyncClient, db_session
 ):
-    analysis = await create_liability_analysis(async_client)
+    analysis = await create_liability_analysis(auth_client)
     document_id = analysis["document_id"]
     run_id = analysis["run"]["run_id"]
     original = (
@@ -338,7 +338,7 @@ async def test_duplicate_findings_are_flagged_not_verified(
     db_session.add(duplicate)
     await db_session.commit()
 
-    validation = await validate_findings(async_client, document_id, run_id, max_retries=0)
+    validation = await validate_findings(auth_client, document_id, run_id, max_retries=0)
     assert validation["run"]["needs_review_count"] == 1
     duplicate_payload = next(
         item for item in validation["findings"] if item["finding_id"] == duplicate.id

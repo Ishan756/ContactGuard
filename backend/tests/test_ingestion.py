@@ -86,12 +86,12 @@ def create_synthetic_docx() -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_upload_and_extract_valid_pdf(async_client: AsyncClient):
+async def test_upload_and_extract_valid_pdf(auth_client: AsyncClient):
     """Test successful PDF upload, metadata extraction, and chunk persistence."""
     pdf_bytes = create_synthetic_pdf()
     files = {"file": ("enterprise_msa.pdf", pdf_bytes, "application/pdf")}
 
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201
     data = response.json()
 
@@ -103,14 +103,14 @@ async def test_upload_and_extract_valid_pdf(async_client: AsyncClient):
     doc_id = data["document"]["id"]
 
     # Verify retrieval by ID
-    get_resp = await async_client.get(f"/api/v1/documents/{doc_id}")
+    get_resp = await auth_client.get(f"/api/v1/documents/{doc_id}")
     assert get_resp.status_code == 200
     get_data = get_resp.json()
     assert get_data["id"] == doc_id
     assert get_data["file_hash_sha256"] is not None
 
     # Verify text chunks with pagination
-    chunks_resp = await async_client.get(f"/api/v1/documents/{doc_id}/chunks?page=1&page_size=10")
+    chunks_resp = await auth_client.get(f"/api/v1/documents/{doc_id}/chunks?page=1&page_size=10")
     assert chunks_resp.status_code == 200
     chunks_data = chunks_resp.json()
     assert chunks_data["total_chunks"] >= 1
@@ -121,7 +121,7 @@ async def test_upload_and_extract_valid_pdf(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_and_extract_valid_docx(async_client: AsyncClient):
+async def test_upload_and_extract_valid_docx(auth_client: AsyncClient):
     """Test successful DOCX upload and section extraction."""
     docx_bytes = create_synthetic_docx()
     files = {
@@ -132,7 +132,7 @@ async def test_upload_and_extract_valid_docx(async_client: AsyncClient):
         )
     }
 
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201
     data = response.json()
 
@@ -142,7 +142,7 @@ async def test_upload_and_extract_valid_docx(async_client: AsyncClient):
     doc_id = data["document"]["id"]
 
     # Verify chunks contain detected section headings
-    chunks_resp = await async_client.get(f"/api/v1/documents/{doc_id}/chunks")
+    chunks_resp = await auth_client.get(f"/api/v1/documents/{doc_id}/chunks")
     assert chunks_resp.status_code == 200
     chunks = chunks_resp.json()["chunks"]
     headings = [c["section_heading"] for c in chunks if c["section_heading"]]
@@ -150,10 +150,10 @@ async def test_upload_and_extract_valid_docx(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_reject_empty_document(async_client: AsyncClient):
+async def test_reject_empty_document(auth_client: AsyncClient):
     """Test rejection of 0-byte file upload."""
     files = {"file": ("empty.pdf", b"", "application/pdf")}
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 422
     data = response.json()
     assert data["error"]["code"] == "VALIDATION_ERROR"
@@ -161,10 +161,10 @@ async def test_reject_empty_document(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_reject_unsupported_file_extension(async_client: AsyncClient):
+async def test_reject_unsupported_file_extension(auth_client: AsyncClient):
     """Test rejection of non-allowed file extension."""
     files = {"file": ("script.exe", b"binarycontent", "application/octet-stream")}
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 422
     data = response.json()
     assert data["error"]["code"] == "VALIDATION_ERROR"
@@ -172,22 +172,22 @@ async def test_reject_unsupported_file_extension(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_reject_spoofed_content_mismatch(async_client: AsyncClient):
+async def test_reject_spoofed_content_mismatch(auth_client: AsyncClient):
     """Test rejection of file named .pdf containing plain non-PDF text."""
     files = {"file": ("spoofed.pdf", b"this is definitely not a real pdf", "application/pdf")}
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 422
     data = response.json()
     assert "signature" in data["error"]["message"].lower()
 
 
 @pytest.mark.asyncio
-async def test_detect_scanned_pdf_needs_ocr(async_client: AsyncClient):
+async def test_detect_scanned_pdf_needs_ocr(auth_client: AsyncClient):
     """Test that image-only / scanned PDFs are flagged with needs_ocr status."""
     scanned_pdf = create_scanned_synthetic_pdf()
     files = {"file": ("scanned_agreement.pdf", scanned_pdf, "application/pdf")}
 
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201
     data = response.json()
 
@@ -196,12 +196,12 @@ async def test_detect_scanned_pdf_needs_ocr(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_handle_encrypted_pdf_gracefully(async_client: AsyncClient):
+async def test_handle_encrypted_pdf_gracefully(auth_client: AsyncClient):
     """Test encrypted PDF handling reports password requirement without crashing."""
     encrypted_pdf = create_encrypted_pdf()
     files = {"file": ("protected_agreement.pdf", encrypted_pdf, "application/pdf")}
 
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201
     data = response.json()
 
@@ -210,9 +210,9 @@ async def test_handle_encrypted_pdf_gracefully(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_list_documents_pagination(async_client: AsyncClient):
+async def test_list_documents_pagination(auth_client: AsyncClient):
     """Test listing documents returns count and metadata items."""
-    response = await async_client.get("/api/v1/documents?limit=10&offset=0")
+    response = await auth_client.get("/api/v1/documents?limit=10&offset=0")
     assert response.status_code == 200
     data = response.json()
     assert "documents" in data

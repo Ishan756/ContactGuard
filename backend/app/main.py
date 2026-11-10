@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
-from app.core.errors import register_exception_handlers
+from app.core.errors import ConfigurationError, register_exception_handlers
 from app.core.logging import get_logger, setup_logging
-from app.core.middleware import RequestContextMiddleware
-from app.db.session import init_db
+from app.core.metrics import metrics
+from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.db.session import dispose_db, init_db
 from app.schemas.health import RootHealthResponse
 from app.services.workflow.checkpointer import CheckpointManager
 
@@ -31,6 +32,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.version,
         settings.app_env,
     )
+    if settings.is_production:
+        problems = settings.production_security_problems()
+        if problems:
+            for problem in problems:
+                logger.error("Production configuration rejected: %s", problem)
+            raise ConfigurationError(
+                "Unsafe production configuration: " + " ".join(problems)
+            )
     await init_db()
     checkpoint_manager = CheckpointManager(settings)
     try:
@@ -51,7 +60,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         await checkpoint_manager.stop()
-        logger.info("Shutting down %s", settings.app_name)
+        await dispose_db()
+        logger.info(
+            "Shutting down %s metrics=%s",
+            settings.app_name,
+            metrics.snapshot()["counters"],
+        )
 
 
 def create_application() -> FastAPI:
@@ -60,9 +74,9 @@ def create_application() -> FastAPI:
         title=f"{settings.app_name} API",
         description="Production-grade AI-powered multi-agent contract risk auditing platform API.",
         version=settings.version,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=None if settings.is_production else "/docs",
+        redoc_url=None if settings.is_production else "/redoc",
+        openapi_url=None if settings.is_production else "/openapi.json",
         lifespan=lifespan,
     )
 
@@ -74,15 +88,24 @@ def create_application() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID", "X-Response-Time-Ms"],
+        allow_methods=settings.cors_allow_methods,
+        allow_headers=settings.cors_allow_headers,
+        expose_headers=[
+            "X-Request-ID",
+            "X-Response-Time-Ms",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "Retry-After",
+        ],
     )
 
-    # 3. Centralized Exception Handlers
+    # 3. Defensive response headers (outermost user middleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    # 4. Centralized Exception Handlers
     register_exception_handlers(app)
 
-    # 4. Root Health Check Endpoint
+    # 5. Root Health Check Endpoint
     @app.get(
         "/health",
         response_model=RootHealthResponse,
@@ -96,11 +119,11 @@ def create_application() -> FastAPI:
             status="ok",
             service=settings.app_name,
             version=settings.version,
-            docs_url="/docs",
+            docs_url="/docs" if not settings.is_production else "",
             timestamp=datetime.now(UTC).isoformat(),
         )
 
-    # 5. Mount API v1 Routers
+    # 6. Mount API v1 Routers
     app.include_router(api_v1_router)
 
     return app

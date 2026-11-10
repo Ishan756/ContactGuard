@@ -54,6 +54,9 @@ class Document(Base):
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    owner_reviewer_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default=DocumentStatus.PENDING)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_pages: Mapped[int] = mapped_column(Integer, default=0)

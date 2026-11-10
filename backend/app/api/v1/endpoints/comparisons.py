@@ -128,7 +128,7 @@ async def create_comparison(
     db: AsyncSession = Depends(get_db),
     service: ContractComparisonService = Depends(get_comparison_service),
 ) -> ContractComparisonResponse:
-    comparison = await service.compare(request, principal.reviewer_id, db)
+    comparison = await service.compare(request, principal, db)
     return map_comparison(comparison)
 
 
@@ -143,11 +143,16 @@ async def list_comparisons(
     ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ContractComparisonService = Depends(get_comparison_service),
 ) -> ContractComparisonListResponse:
     comparisons, total = await service.list(
-        db, document_id=document_id, limit=limit, offset=offset
+        db,
+        principal,
+        document_id=document_id,
+        limit=limit,
+        offset=offset,
     )
     return ContractComparisonListResponse(
         comparisons=[map_comparison(item) for item in comparisons],
@@ -162,8 +167,9 @@ async def list_comparisons(
 )
 async def get_comparison(
     comparison_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: ContractComparisonService = Depends(get_comparison_service),
 ) -> ContractComparisonResponse:
-    comparison = await service.get(comparison_id, db)
+    comparison = await service.get(comparison_id, db, principal)
     return map_comparison(comparison)

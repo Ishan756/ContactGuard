@@ -9,6 +9,7 @@ from app.core.llm.factory import get_llm_provider
 from app.core.llm.mock import MockLLMProvider
 from app.main import app
 from app.services.vector.qdrant_service import QdrantVectorService, ScoredVectorMatch
+from tests.conftest import ADMIN_AUTH_HEADERS
 
 LIABILITY_UNLIMITED = (
     "The vendor's aggregate liability under this Agreement shall be unlimited "
@@ -127,7 +128,7 @@ def create_contract_docx(paragraphs: list[tuple[str, str]]) -> bytes:
 
 
 async def upload_contract(
-    async_client: AsyncClient, paragraphs: list[tuple[str, str]]
+    auth_client: AsyncClient, paragraphs: list[tuple[str, str]]
 ) -> str:
     files = {
         "file": (
@@ -136,21 +137,22 @@ async def upload_contract(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     }
-    response = await async_client.post("/api/v1/documents", files=files)
+    response = await auth_client.post("/api/v1/documents", files=files)
     assert response.status_code == 201, response.text
     return response.json()["document"]["id"]
 
 
 async def create_policy(
-    async_client: AsyncClient,
+    auth_client: AsyncClient,
     name: str,
     text: str,
     category: str = "Legal",
     version: str = "1.0.0",
 ) -> str:
-    response = await async_client.post(
+    response = await auth_client.post(
         "/api/v1/policies",
         json={"name": name, "version": version, "category": category, "text_content": text},
+        headers=ADMIN_AUTH_HEADERS,
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -167,11 +169,11 @@ def clause_candidate(category: str, text: str, summary: str) -> dict:
 
 
 async def extract_clauses(
-    async_client: AsyncClient, document_id: str, candidates: list[dict]
+    auth_client: AsyncClient, document_id: str, candidates: list[dict]
 ) -> dict:
     provider = MockLLMProvider([{"clauses": candidates}], model_name="mock-extractor")
     app.dependency_overrides[get_llm_provider] = lambda: provider
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/extract-clauses"
     )
     assert response.status_code == 201, response.text
@@ -179,9 +181,9 @@ async def extract_clauses(
 
 
 async def retrieve_policies(
-    async_client: AsyncClient, document_id: str, body: dict | None = None
+    auth_client: AsyncClient, document_id: str, body: dict | None = None
 ) -> dict:
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/retrieve-policies", json=body
     )
     assert response.status_code == 201, response.text
@@ -189,9 +191,9 @@ async def retrieve_policies(
 
 
 async def analyze_risk(
-    async_client: AsyncClient, document_id: str, body: dict | None = None
+    auth_client: AsyncClient, document_id: str, body: dict | None = None
 ) -> dict:
-    response = await async_client.post(
+    response = await auth_client.post(
         f"/api/v1/documents/{document_id}/analyze-risk", json=body
     )
     assert response.status_code == 201, response.text
@@ -200,25 +202,25 @@ async def analyze_risk(
 
 @pytest.mark.asyncio
 async def test_unlimited_liability_is_critical_policy_deviation(
-    async_client: AsyncClient,
+    auth_client: AsyncClient,
 ):
     policy_id = await create_policy(
-        async_client, "Vendor Liability Policy", LIABILITY_POLICY, category="liability"
+        auth_client, "Vendor Liability Policy", LIABILITY_POLICY, category="liability"
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "1. LIMITATION OF LIABILITY"),
             ("paragraph", LIABILITY_UNLIMITED),
         ],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("liability", LIABILITY_UNLIMITED, "Unlimited vendor liability.")],
     )
 
-    retrieval = await retrieve_policies(async_client, document_id)
+    retrieval = await retrieve_policies(auth_client, document_id)
     assert retrieval["run"]["status"] == "completed"
     assert retrieval["clauses"][0]["coverage_status"] == "covered"
     evidence = retrieval["clauses"][0]["evidence"][0]
@@ -226,7 +228,7 @@ async def test_unlimited_liability_is_critical_policy_deviation(
     assert evidence["policy_version"] == "1.0.0"
     assert evidence["policy_status"] == "active"
 
-    analysis = await analyze_risk(async_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
     assert analysis["run"]["status"] == "completed"
     finding = next(
         item for item in analysis["findings"] if item["rule_id"] == "liability_unlimited"
@@ -241,40 +243,40 @@ async def test_unlimited_liability_is_critical_policy_deviation(
     assert finding["policy_id"] == policy_id
     assert finding["policy_source_reference"] == evidence["source_identifier"]
 
-    listed = await async_client.get(f"/api/v1/documents/{document_id}/findings")
+    listed = await auth_client.get(f"/api/v1/documents/{document_id}/findings")
     assert listed.status_code == 200
     assert listed.json()["total"] == len(analysis["findings"])
 
-    detail = await async_client.get(
+    detail = await auth_client.get(
         f"/api/v1/documents/{document_id}/findings/{finding['finding_id']}"
     )
     assert detail.status_code == 200
     assert detail.json()["explanation"] == finding["explanation"]
 
-    runs = await async_client.get(f"/api/v1/documents/{document_id}/analysis-runs")
+    runs = await auth_client.get(f"/api/v1/documents/{document_id}/analysis-runs")
     assert runs.status_code == 200
     assert runs.json()["total"] == 1
 
 
 @pytest.mark.asyncio
-async def test_termination_notice_shortfall(async_client: AsyncClient):
+async def test_termination_notice_shortfall(auth_client: AsyncClient):
     await create_policy(
-        async_client,
+        auth_client,
         "Termination Notice Policy",
         TERMINATION_POLICY,
         category="termination",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "2. TERMINATION"), ("paragraph", TERMINATION_SHORT)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("termination", TERMINATION_SHORT, "Short termination notice.")],
     )
-    await retrieve_policies(async_client, document_id)
-    analysis = await analyze_risk(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
 
     finding = next(
         item
@@ -288,21 +290,21 @@ async def test_termination_notice_shortfall(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_payment_period_deviation(async_client: AsyncClient):
+async def test_payment_period_deviation(auth_client: AsyncClient):
     await create_policy(
-        async_client, "Payment Terms Policy", PAYMENT_POLICY, category="payment"
+        auth_client, "Payment Terms Policy", PAYMENT_POLICY, category="payment"
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "3. PAYMENT TERMS"), ("paragraph", PAYMENT_LONG)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("payment", PAYMENT_LONG, "Ninety-day payment terms.")],
     )
-    await retrieve_policies(async_client, document_id)
-    analysis = await analyze_risk(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
 
     finding = next(
         item
@@ -316,24 +318,24 @@ async def test_payment_period_deviation(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_missing_data_protection_clause_is_flagged(async_client: AsyncClient):
+async def test_missing_data_protection_clause_is_flagged(auth_client: AsyncClient):
     await create_policy(
-        async_client,
+        auth_client,
         "Data Protection Policy",
         DATA_PROTECTION_POLICY,
         category="data_protection",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "4. LIABILITY"), ("paragraph", LIABILITY_UNLIMITED)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("liability", LIABILITY_UNLIMITED, "Liability clause.")],
     )
-    await retrieve_policies(async_client, document_id)
-    analysis = await analyze_risk(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
 
     missing = [
         item for item in analysis["findings"] if item["finding_type"] == "missing_clause"
@@ -348,9 +350,9 @@ async def test_missing_data_protection_clause_is_flagged(async_client: AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_missing_policy_evidence_is_explicit(async_client: AsyncClient):
+async def test_missing_policy_evidence_is_explicit(auth_client: AsyncClient):
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [
             ("heading", "5. INDEMNITY"),
             (
@@ -360,7 +362,7 @@ async def test_missing_policy_evidence_is_explicit(async_client: AsyncClient):
         ],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [
             clause_candidate(
@@ -370,12 +372,12 @@ async def test_missing_policy_evidence_is_explicit(async_client: AsyncClient):
             )
         ],
     )
-    retrieval = await retrieve_policies(async_client, document_id)
+    retrieval = await retrieve_policies(auth_client, document_id)
     assert retrieval["run"]["missing_coverage_count"] == 1
     assert retrieval["clauses"][0]["coverage_status"] == "missing"
     assert "not a finding of compliance" in retrieval["clauses"][0]["coverage_note"]
 
-    analysis = await analyze_risk(async_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
     finding = next(
         item
         for item in analysis["findings"]
@@ -387,56 +389,58 @@ async def test_missing_policy_evidence_is_explicit(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_archived_policy_is_excluded_from_retrieval(async_client: AsyncClient):
+async def test_archived_policy_is_excluded_from_retrieval(auth_client: AsyncClient):
     policy_id = await create_policy(
-        async_client, "Archived Liability Policy", LIABILITY_POLICY, category="liability"
+        auth_client, "Archived Liability Policy", LIABILITY_POLICY, category="liability"
     )
-    update = await async_client.put(
-        f"/api/v1/policies/{policy_id}", json={"status": "archived"}
+    update = await auth_client.put(
+        f"/api/v1/policies/{policy_id}",
+        json={"status": "archived"},
+        headers=ADMIN_AUTH_HEADERS,
     )
     assert update.status_code == 200, update.text
 
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "6. LIABILITY"), ("paragraph", LIABILITY_UNLIMITED)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("liability", LIABILITY_UNLIMITED, "Liability clause.")],
     )
-    retrieval = await retrieve_policies(async_client, document_id)
+    retrieval = await retrieve_policies(auth_client, document_id)
     assert retrieval["run"]["missing_coverage_count"] == 1
     assert retrieval["clauses"][0]["evidence"] == []
 
 
 @pytest.mark.asyncio
-async def test_version_filter_limits_policy_evidence(async_client: AsyncClient):
+async def test_version_filter_limits_policy_evidence(auth_client: AsyncClient):
     old_id = await create_policy(
-        async_client,
+        auth_client,
         "Liability Policy",
         LIABILITY_POLICY,
         category="liability",
         version="1.0.0",
     )
     await create_policy(
-        async_client,
+        auth_client,
         "Liability Policy",
         LIABILITY_POLICY,
         category="liability",
         version="2.0.0",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "7. LIABILITY"), ("paragraph", LIABILITY_UNLIMITED)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [clause_candidate("liability", LIABILITY_UNLIMITED, "Liability clause.")],
     )
     retrieval = await retrieve_policies(
-        async_client, document_id, {"policy_versions": ["1.0.0"]}
+        auth_client, document_id, {"policy_versions": ["1.0.0"]}
     )
     assert retrieval["run"]["policy_versions"] == ["1.0.0"]
     evidence = retrieval["clauses"][0]["evidence"]
@@ -447,20 +451,20 @@ async def test_version_filter_limits_policy_evidence(async_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_model_generated_deviation_requires_verbatim_citations(
-    async_client: AsyncClient,
+    auth_client: AsyncClient,
 ):
     await create_policy(
-        async_client,
+        auth_client,
         "Confidentiality Policy",
         CONFIDENTIALITY_POLICY,
         category="confidentiality",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "8. CONFIDENTIALITY"), ("paragraph", CONFIDENTIALITY_TEXT)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [
             clause_candidate(
@@ -490,9 +494,9 @@ async def test_model_generated_deviation_requires_verbatim_citations(
 
     provider = MockLLMProvider([model_response], model_name="mock-risk-analyzer")
     # Replace the extraction call with a fresh provider sequence after extraction.
-    await retrieve_policies(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
     app.dependency_overrides[get_llm_provider] = lambda: provider
-    analysis = await analyze_risk(async_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
 
     finding = next(
         item for item in analysis["findings"] if item["severity_basis"] == "model_analysis"
@@ -508,19 +512,19 @@ async def test_model_generated_deviation_requires_verbatim_citations(
 
 
 @pytest.mark.asyncio
-async def test_illegal_claim_is_sanitized(async_client: AsyncClient):
+async def test_illegal_claim_is_sanitized(auth_client: AsyncClient):
     await create_policy(
-        async_client,
+        auth_client,
         "Confidentiality Policy",
         CONFIDENTIALITY_POLICY,
         category="confidentiality",
     )
     document_id = await upload_contract(
-        async_client,
+        auth_client,
         [("heading", "9. CONFIDENTIALITY"), ("paragraph", CONFIDENTIALITY_TEXT)],
     )
     await extract_clauses(
-        async_client,
+        auth_client,
         document_id,
         [
             clause_candidate(
@@ -547,9 +551,9 @@ async def test_illegal_claim_is_sanitized(async_client: AsyncClient):
         }
 
     provider = MockLLMProvider([model_response], model_name="mock-risk-analyzer")
-    await retrieve_policies(async_client, document_id)
+    await retrieve_policies(auth_client, document_id)
     app.dependency_overrides[get_llm_provider] = lambda: provider
-    analysis = await analyze_risk(async_client, document_id)
+    analysis = await analyze_risk(auth_client, document_id)
 
     finding = next(
         item

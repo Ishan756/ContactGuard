@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.core.logging import get_logger
+from app.core.security import ReviewerPrincipal
 from app.db.models import (
     Clause,
     ClauseChange,
@@ -324,13 +325,17 @@ class ContractComparisonService:
     async def compare(
         self,
         request: ContractComparisonRequest,
-        reviewer_id: str,
+        principal: ReviewerPrincipal,
         db: AsyncSession,
     ) -> ContractComparison:
         if request.base_document_id == request.target_document_id:
             raise ValidationError("Base and target documents must be different.")
         base_document = await self._get_document(request.base_document_id, db)
         target_document = await self._get_document(request.target_document_id, db)
+        if not principal.can_access_owned(base_document.owner_reviewer_id) or not (
+            principal.can_access_owned(target_document.owner_reviewer_id)
+        ):
+            raise ForbiddenError("You are not authorized to compare these documents.")
 
         base_clauses = await self._clauses(base_document.id, db)
         target_clauses = await self._clauses(target_document.id, db)
@@ -347,7 +352,7 @@ class ContractComparisonService:
             id=str(uuid.uuid4()),
             base_document_id=base_document.id,
             target_document_id=target_document.id,
-            created_by=reviewer_id,
+            created_by=principal.reviewer_id,
             status=ComparisonStatus.RUNNING,
             reanalysis_requested=request.reanalyze_target,
             created_at=datetime.now(UTC),
@@ -458,7 +463,7 @@ class ContractComparisonService:
                 len(changes),
                 len(finding_changes),
             )
-            return await self.get(comparison.id, db)
+            return await self.get(comparison.id, db, principal)
         except Exception as exc:
             comparison.status = ComparisonStatus.FAILED
             comparison.error_message = str(exc)
@@ -468,7 +473,12 @@ class ContractComparisonService:
             logger.exception("Contract comparison failed for %s", comparison.id)
             raise
 
-    async def get(self, comparison_id: str, db: AsyncSession) -> ContractComparison:
+    async def get(
+        self,
+        comparison_id: str,
+        db: AsyncSession,
+        principal: ReviewerPrincipal,
+    ) -> ContractComparison:
         comparison = (
             await db.execute(
                 select(ContractComparison)
@@ -481,16 +491,21 @@ class ContractComparisonService:
         ).scalar_one_or_none()
         if not comparison:
             raise NotFoundError(f"Comparison '{comparison_id}' not found.")
+        if not principal.can_access_owned(comparison.created_by):
+            raise ForbiddenError("You are not authorized to access this comparison.")
         return comparison
 
     async def list(
         self,
         db: AsyncSession,
+        principal: ReviewerPrincipal,
         document_id: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[ContractComparison], int]:
         filters = []
+        if not principal.is_admin:
+            filters.append(ContractComparison.created_by == principal.reviewer_id)
         if document_id:
             filters.append(
                 (ContractComparison.base_document_id == document_id)

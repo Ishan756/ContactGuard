@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.embeddings.base import EmbeddingProvider
 from app.core.embeddings.factory import get_embedding_provider
+from app.core.security import ReviewerPrincipal, require_admin, require_reviewer
 from app.db.models import Policy
 from app.db.session import get_db
 from app.schemas.policy import (
@@ -58,6 +59,7 @@ def map_policy_response(p: Policy) -> PolicyResponse:
 )
 async def create_policy(
     request: PolicyCreateRequest,
+    principal: ReviewerPrincipal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicyResponse:
@@ -78,6 +80,7 @@ async def upload_policy_document(
     category: str | None = Form(default=None, description="Domain category"),
     description: str | None = Form(default=None, description="Description"),
     file: UploadFile = File(..., description="PDF or DOCX policy document"),
+    principal: ReviewerPrincipal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicyResponse:
@@ -88,6 +91,7 @@ async def upload_policy_document(
         description=description,
         file=file,
         db=db,
+        owner_reviewer_id=principal.reviewer_id,
     )
     return map_policy_response(policy)
 
@@ -102,6 +106,7 @@ async def list_policies(
     offset: int = Query(default=0, ge=0),
     category: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicyListResponse:
@@ -125,6 +130,7 @@ async def list_policies(
 )
 async def get_policy(
     policy_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicyResponse:
@@ -141,6 +147,7 @@ async def get_policy(
 async def update_policy(
     policy_id: str,
     request: PolicyUpdateRequest,
+    principal: ReviewerPrincipal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicyResponse:
@@ -155,6 +162,7 @@ async def update_policy(
 )
 async def delete_policy(
     policy_id: str,
+    principal: ReviewerPrincipal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> None:
@@ -169,6 +177,7 @@ async def delete_policy(
 )
 async def search_policies(
     search_req: PolicySearchRequest,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     policy_service: PolicyService = Depends(get_policy_service),
 ) -> PolicySearchResponse:
     return await policy_service.search_policies(search_req)

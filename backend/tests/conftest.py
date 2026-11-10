@@ -9,6 +9,16 @@ from app.db.models import Base
 from app.db.session import get_db, get_session_factory
 from app.main import app
 
+TEST_REVIEWER_ID = "reviewer-a"
+REVIEWER_AUTH_HEADERS = {
+    "X-Reviewer-ID": TEST_REVIEWER_ID,
+    "X-Workflow-Key": "dev-workflow-review-key",
+}
+ADMIN_AUTH_HEADERS = {
+    "X-Reviewer-ID": "admin-test",
+    "X-Workflow-Key": "dev-admin-key-change-in-production",
+}
+
 # Shared in-memory SQLite engine for async tests
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 test_engine = create_async_engine(
@@ -65,3 +75,10 @@ async def async_client():
     ) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def auth_client(async_client: AsyncClient):
+    """Authenticated reviewer client for protected API tests."""
+    async_client.headers.update(REVIEWER_AUTH_HEADERS)
+    yield async_client

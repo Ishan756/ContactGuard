@@ -138,9 +138,16 @@ npm run dev -- --host 0.0.0.0
 ```
 
 Open `http://localhost:5173`. The Vite dev server proxies `/api` and `/health` to
-`http://localhost:8000`. In development the UI defaults to reviewer `local-reviewer` with
-the configured `WORKFLOW_REVIEW_API_KEY`; set credentials explicitly on the Settings page
-or via `VITE_REVIEWER_ID` / `VITE_WORKFLOW_API_KEY`.
+`http://localhost:8000`. Protected endpoints require `X-Reviewer-ID` and
+`X-Workflow-Key`. In development the UI defaults to reviewer `local-reviewer` with the
+configured `WORKFLOW_REVIEW_API_KEY`; set credentials explicitly on the Settings page or
+via `VITE_REVIEWER_ID` / `VITE_WORKFLOW_API_KEY`.
+
+Reviewer keys are owner-scoped. `ADMIN_API_KEY` is required for policy management and
+grants cross-reviewer read access. Production refuses to start with development keys,
+`APP_DEBUG=true`, wildcard CORS, a default database password, or disabled security
+controls. See [docs/getting_started.md](docs/getting_started.md) for the Docker/EC2,
+TLS, backup, and retention checklist.
 
 ### 3. Frontend Review Dashboard
 
@@ -249,8 +256,9 @@ durable run IDs, statuses, timestamps, errors, reviewer decisions, and an append
 audit trail. PostgreSQL-compatible checkpointing uses `AsyncPostgresSaver` (with a local
 SQLite checkpointer for development/tests), initialized during application startup.
 Reviewers authenticate with `X-Reviewer-ID` and `X-Workflow-Key`, and only the workflow
-owner can inspect or resume it. Human approval is separate from automatic evidence
-verification and never executes legal or contractual actions.
+owner can inspect or resume it with a reviewer key; administrators may access all
+workflows. Human approval is separate from automatic evidence verification and never
+executes legal or contractual actions.
 
 See [docs/workflow.md](docs/workflow.md) for the Mermaid graph, checkpoint configuration,
 API examples, idempotency, and human-review lifecycle.
@@ -287,6 +295,10 @@ report is exposed by `GET /api/v1/evaluation/summary` and summarized on the dash
 ---
 
 ## Security & Engineering Safeguards
-- **Zero Committed Secrets**: Secrets are loaded exclusively via environment variables and `.env` (enforced via `.gitignore` and `pydantic-settings`).
-- **Distributed Request Tracing**: Every inbound request receives a unique `X-Request-ID`, which is propagated through log entries, database sessions, and response headers.
-- **Strict Error Envelope**: Centralized exception handlers catch and format both domain errors and unhandled exceptions into uniform, client-friendly error structures.
+- **Zero Committed Secrets**: Secrets are loaded exclusively via environment variables and `.env` (enforced via `.gitignore` and `pydantic-settings`). Production startup rejects unsafe defaults.
+- **Role-Based Access**: Reviewer keys are owner-scoped; the administrative key is required for policy management and can inspect all reviewer records. Documents record their owning reviewer.
+- **Input and Transport Hardening**: Bounded upload reads, magic-byte validation, filename sanitization, explicit CORS methods/headers, security response headers, HSTS in production, request timeouts, and per-IP rate limiting. Behind a trusted reverse proxy, `TRUST_PROXY_HEADERS=true` uses `X-Real-IP` for limiter keys.
+- **Distributed Request Tracing**: Every inbound request receives a unique `X-Request-ID`, propagated through logs and response headers. Workflow execution binds a workflow ID to structured logs.
+- **Dependency-Aware Health**: Liveness and readiness probes are public. Production readiness returns `503` when PostgreSQL or Qdrant is degraded.
+- **Strict Error Envelope**: Centralized exception handlers format domain and unhandled errors into uniform, client-friendly structures without leaking secrets.
+- **Deployment Guidance**: See [docs/getting_started.md](docs/getting_started.md) for production `.env`, TLS reverse proxy, EC2 security groups, backups, retention, upgrades, and rollback.

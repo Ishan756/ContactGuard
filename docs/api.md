@@ -2,6 +2,32 @@
 
 The ContractGuard backend exposes RESTful endpoints with automatic OpenAPI documentation available at `/docs` (Swagger UI) and `/redoc` (ReDoc).
 
+## Authentication & Authorization
+
+All contract, clause, policy, risk, comparison, and workflow endpoints require two headers:
+
+| Header | Purpose |
+|---|---|
+| `X-Reviewer-ID` | Stable reviewer identity (1-120 printable characters) |
+| `X-Workflow-Key` | Matches either `WORKFLOW_REVIEW_API_KEY` or `ADMIN_API_KEY` |
+
+- **Reviewer role**: owner-scoped access to documents, clauses, findings, comparisons,
+  and workflows created with the same `X-Reviewer-ID`. Reviewer keys cannot manage policies.
+- **Admin role**: full read access across reviewer records and permission to create,
+  update, upload, and delete policies.
+- Missing/invalid credentials return `401`; valid reviewer credentials without ownership
+  or admin privileges return `403`.
+- Public endpoints: `GET /health`, `GET /api/v1/health/live`,
+  `GET /api/v1/health/ready`, and `GET /api/v1/evaluation/summary`.
+- Legacy documents with no recorded owner are accessible to administrators only.
+
+Example:
+```bash
+curl -H "X-Reviewer-ID: reviewer-a" \
+     -H "X-Workflow-Key: $WORKFLOW_REVIEW_API_KEY" \
+     http://localhost:8000/api/v1/documents
+```
+
 ## Common Standards
 
 ### Request ID Tracing
@@ -9,6 +35,13 @@ Every request receives or generates a unique UUID4 request ID:
 - **Client Header**: `X-Request-ID` (optional, client-provided)
 - **Response Header**: `X-Request-ID` (always returned)
 - **Latency Header**: `X-Response-Time-Ms`
+- **Rate Limit Headers**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`
+  on `429` responses. Limits are keyed by client IP; set `TRUST_PROXY_HEADERS=true` only
+  when a trusted reverse proxy overwrites `X-Real-IP`.
+- **Security Headers**: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `Cross-Origin-Resource-Policy`.
+  HSTS is emitted only when `APP_ENV=production`.
+- Requests exceeding `REQUEST_TIMEOUT_SECONDS` (default 300) return `504`.
 
 ### Standard Error Schema
 All application and validation errors adhere to the following schema:
@@ -57,7 +90,8 @@ All application and validation errors adhere to the following schema:
 ### 3. Readiness Probe
 - **Endpoint**: `GET /api/v1/health/ready`
 - **Description**: Comprehensive readiness probe checking connectivity to PostgreSQL and Qdrant.
-- **Response**: `200 OK`
+- **Response**: `200 OK` in development, or `503 Service Unavailable` in production when
+  a downstream dependency is degraded.
 ```json
 {
   "status": "healthy",
@@ -91,13 +125,16 @@ All application and validation errors adhere to the following schema:
 
 ### 1. Upload & Ingest Contract
 - **Endpoint**: `POST /api/v1/documents`
+- **Auth**: Reviewer or admin
 - **Content-Type**: `multipart/form-data`
 - **Parameters**: `file` (binary PDF or DOCX file)
 - **Validation**:
   - Max upload size: 25MB (configurable via `MAX_UPLOAD_SIZE_MB`)
   - Allowed extensions: `.pdf`, `.docx`
   - Magic bytes verification (`%PDF-` for PDF, `PK\x03\x04` for DOCX)
-  - Filename sanitization against path traversal
+  - Filename sanitization and 255-character bound
+  - Upload content read is bounded by `MAX_UPLOAD_SIZE_MB`
+- **Ownership**: The authenticated reviewer becomes the document owner.
 - **Response**: `201 Created`
 ```json
 {
@@ -121,6 +158,7 @@ All application and validation errors adhere to the following schema:
 
 ### 2. List Documents
 - **Endpoint**: `GET /api/v1/documents`
+- **Auth**: Reviewer or admin; reviewers see only their own documents.
 - **Query Parameters**:
   - `limit`: int (default: 20, max: 100)
   - `offset`: int (default: 0)
@@ -134,10 +172,12 @@ All application and validation errors adhere to the following schema:
 
 ### 3. Get Document Metadata
 - **Endpoint**: `GET /api/v1/documents/{document_id}`
+- **Auth**: Owner or admin.
 - **Response**: `200 OK` (returns `DocumentMetadataResponse`)
 
 ### 4. Get Paginated Chunks with Offsets
 - **Endpoint**: `GET /api/v1/documents/{document_id}/chunks`
+- **Auth**: Owner or admin.
 - **Query Parameters**:
   - `page`: int (default: 1)
   - `page_size`: int (default: 20, max: 100)
@@ -165,9 +205,18 @@ All application and validation errors adhere to the following schema:
 }
 ```
 
+### 5. Delete Document
+- **Endpoint**: `DELETE /api/v1/documents/{document_id}`
+- **Auth**: Owner or admin.
+- **Description**: Deletes the document, dependent chunks/runs/findings/workflows, and the
+  stored source file. Returns `204 No Content`.
+
 ---
 
 ## Clause Extraction Endpoints
+
+All clause endpoints require reviewer authentication and enforce document ownership.
+
 
 Extraction and legal risk assessment are separate stages. These endpoints only extract
 and validate clauses; they do not assign risk scores.
@@ -241,9 +290,16 @@ and validate clauses; they do not assign risk scores.
 
 ---
 
+## Policy Library Endpoints
+
+- `GET /api/v1/policies` and `POST /api/v1/policies/search` require any valid reviewer key.
+- `POST /api/v1/policies`, `POST /api/v1/policies/upload`, `PUT /api/v1/policies/{id}`,
+  and `DELETE /api/v1/policies/{id}` require the administrative key.
+
 ## Policy Retrieval & Risk Analysis Endpoints
 
-Retrieval and risk analysis are separate from clause extraction. Retrieval returns active
+All retrieval, analysis, finding, and validation endpoints require reviewer authentication
+and enforce ownership of the target document. Retrieval and risk analysis are separate from clause extraction. Retrieval returns active
 policy evidence and explicit coverage gaps. Risk analysis persists review findings with
 verbatim contract and policy citations. An independent Evidence Validation Agent then
 re-checks citations, provenance, page numbers, explanations, and severity, with bounded
@@ -387,8 +443,8 @@ severity configuration, and example findings.
 
 ## LangGraph Workflow & Human Review Endpoints
 
-All workflow endpoints require `X-Reviewer-ID` and `X-Workflow-Key`. Only the reviewer
-who started a workflow may inspect results or resume it. Start and resume support the
+All workflow endpoints require `X-Reviewer-ID` and `X-Workflow-Key`. Reviewers may only
+inspect or resume workflows they started. Administrative keys may inspect all workflows. Start and resume support the
 `Idempotency-Key` header. See [workflow.md](workflow.md) for the full state machine,
 Mermaid diagram, checkpoint lifecycle, and decision semantics.
 
@@ -397,7 +453,8 @@ Mermaid diagram, checkpoint lifecycle, and decision semantics.
 - **Headers**: `X-Reviewer-ID`, `X-Workflow-Key`
 - **Query parameters**: optional `document_id`, `limit` (default `50`), `offset` (default `0`)
 - **Response**: `200 OK` (`WorkflowRunListResponse`) containing only workflows owned by
-the authenticated reviewer, newest first, with `runs` and `total`.
+the authenticated reviewer (or all workflows for admins), newest first, with `runs` and
+`total`.
 
 ### 2. Start Workflow
 - **Endpoint**: `POST /api/v1/workflows`
@@ -467,6 +524,7 @@ revision or `completed` after approval/dismissal.
 
 Comparison endpoints identify textual, classification, and finding-level changes between
 two contract versions. They do not provide legal advice or determine enforceability.
+Reviewers may compare and inspect only documents/comparisons they own; admins may access all.
 
 ### 1. Create Comparison
 - **Endpoint**: `POST /api/v1/comparisons`

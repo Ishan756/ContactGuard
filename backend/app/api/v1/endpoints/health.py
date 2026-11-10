@@ -3,7 +3,7 @@ import time
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -99,7 +99,10 @@ async def live() -> LiveHealthResponse:
     summary="Readiness Probe",
     description="Verifies app readiness and reports health state of downstream dependencies.",
 )
-async def ready(settings: Settings = Depends(get_settings)) -> ReadyHealthResponse:
+async def ready(
+    response: Response,
+    settings: Settings = Depends(get_settings),
+) -> ReadyHealthResponse:
     """Kubernetes / Docker readiness probe checking dependent subsystems."""
     qdrant_check, db_check = await asyncio.gather(
         check_qdrant(settings),
@@ -133,8 +136,13 @@ async def ready(settings: Settings = Depends(get_settings)) -> ReadyHealthRespon
 
     # In development mode, API is ready to serve even if infra containers are starting
     overall_status = HealthStatus.HEALTHY
-    if any(c.status == HealthStatus.DEGRADED for c in components.values()):
+    if any(
+        c.status in (HealthStatus.DEGRADED, HealthStatus.UNHEALTHY)
+        for c in components.values()
+    ):
         overall_status = HealthStatus.DEGRADED
+    if settings.is_production and overall_status != HealthStatus.HEALTHY:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return ReadyHealthResponse(
         status=overall_status,

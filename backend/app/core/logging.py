@@ -9,11 +9,19 @@ from typing import Any
 request_id_ctx_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "request_id", default=None
 )
+workflow_id_ctx_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "workflow_id", default=None
+)
 
 
 def get_current_request_id() -> str | None:
     """Retrieve the current request ID from context."""
     return request_id_ctx_var.get()
+
+
+def get_current_workflow_id() -> str | None:
+    """Retrieve the current workflow ID from context."""
+    return workflow_id_ctx_var.get()
 
 
 class JSONStructuredFormatter(logging.Formatter):
@@ -27,6 +35,7 @@ class JSONStructuredFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
             "request_id": req_id or getattr(record, "request_id", None),
+            "workflow_id": get_current_workflow_id(),
         }
 
         if record.exc_info:
@@ -48,7 +57,12 @@ class TextStructuredFormatter(logging.Formatter):
         timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         msg = record.getMessage()
 
-        base = f"[{timestamp}] [{record.levelname:<7}] [req:{req_id_short}] {record.name}: {msg}"
+        workflow_id = get_current_workflow_id()
+        workflow_part = f" [wf:{workflow_id[:8]}]" if workflow_id else ""
+        base = (
+            f"[{timestamp}] [{record.levelname:<7}] [req:{req_id_short}]"
+            f"{workflow_part} {record.name}: {msg}"
+        )
         if record.exc_info:
             base += f"\n{self.formatException(record.exc_info)}"
         return base

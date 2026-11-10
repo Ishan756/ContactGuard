@@ -33,18 +33,19 @@
 ## 2. Core Subsystems
 
 ### 2.1 Backend (FastAPI + Pydantic v2)
-- **Settings & Config (`app.core.config`)**: Strongly typed settings loaded from environment variables and `.env` with validation.
-- **Observability (`app.core.logging`, `app.core.middleware`)**: Injects unique `X-Request-ID` across every incoming request, logs structured operational context, and records execution latency.
+- **Settings & Config (`app.core.config`)**: Strongly typed settings loaded from environment variables and `.env` with production safety validation.
+- **Authentication & Authorization (`app.core.security`, `app.api.v1.authorization`)**: `X-Reviewer-ID` identifies the principal; `X-Workflow-Key` maps to either owner-scoped reviewer or administrative role. Documents persist `owner_reviewer_id`, and authorization helpers enforce owner/admin access.
+- **Observability (`app.core.logging`, `app.core.middleware`)**: Injects unique `X-Request-ID` and workflow context, emits structured request/security metrics, enforces per-IP sliding-window rate limits and request timeouts, and attaches defensive response headers.
 - **Error Standard (`app.core.errors`)**: Centralized error responses following `{ "error": { "code", "message", "details" }, "request_id", "timestamp" }`.
-- **Probes (`app.api.v1.endpoints.health`)**: Liveness (`/api/v1/health/live`) and readiness (`/api/v1/health/ready`) with non-blocking checks for PostgreSQL and Qdrant.
+- **Probes (`app.api.v1.endpoints.health`)**: Public liveness (`/api/v1/health/live`) and readiness (`/api/v1/health/ready`) with non-blocking checks for PostgreSQL and Qdrant. Production readiness returns `503` for degraded dependencies.
 
 ### 2.2 Frontend (React 18 + TypeScript + Vite)
 - **Shell**: Modular layout with responsive Sidebar, status-aware Topbar, and routed page views.
-- **Client (`services/apiClient.ts`)**: Type-safe REST client ensuring automatic propagation of `X-Request-ID` and normalized error decoding into typed exceptions.
+- **Client (`services/apiClient.ts`)**: Type-safe REST client ensuring automatic propagation of `X-Request-ID`, reviewer/admin `X-Workflow-Key` authentication, and normalized error decoding into typed exceptions.
 - **Aesthetic**: Premium dark-slate interface with glassmorphism, glowing telemetry indicators, and clear typography.
 
 ### 2.3 Data & Storage Subsystems
-- **PostgreSQL**: Stores contract entities, document metadata, policies (`policies`, `policy_chunks`), multi-agent evaluation traces, and audit trails.
+- **PostgreSQL**: Stores contract entities, document ownership metadata, policies (`policies`, `policy_chunks`), multi-agent evaluation traces, and audit trails. Connection pooling, pre-ping, recycle, and graceful disposal are configurable for production.
 - **Qdrant**: High-performance vector database storing dense vector embeddings of policy chunks (`company_policies` collection) for sub-millisecond semantic retrieval against individual contract clauses.
 - **Embedding Provider Interface**: Pluggable interface (`EmbeddingProvider`) with Gemini API (`GeminiEmbeddingProvider` using `text-embedding-004`) and zero-cost deterministic mock provider (`DeterministicEmbeddingProvider`) for isolated testing.
 

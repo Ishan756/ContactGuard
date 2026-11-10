@@ -4,11 +4,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.authorization import require_document_access
 from app.core.config import Settings, get_settings
 from app.core.embeddings.base import EmbeddingProvider
 from app.core.embeddings.factory import get_embedding_provider
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import get_llm_provider
+from app.core.security import ReviewerPrincipal, require_reviewer
 from app.db.models import (
     EvidenceValidationAttempt,
     EvidenceValidationRun,
@@ -330,9 +332,11 @@ def map_validation_attempt_response(
 async def retrieve_policies(
     document_id: str,
     request: PolicyRetrievalRequest | None = None,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: PolicyRetrievalService = Depends(get_policy_retrieval_service),
 ) -> PolicyRetrievalResponse:
+    await require_document_access(document_id, db, principal)
     run, results = await service.retrieve(
         document_id=document_id, db=db, request=request
     )
@@ -352,9 +356,11 @@ async def list_retrieval_runs(
     document_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: PolicyRetrievalService = Depends(get_policy_retrieval_service),
 ) -> PolicyRetrievalRunListResponse:
+    await require_document_access(document_id, db, principal)
     runs, total = await service.list_runs(
         document_id=document_id, db=db, limit=limit, offset=offset
     )
@@ -380,10 +386,12 @@ async def list_retrieval_runs(
 async def analyze_risk(
     document_id: str,
     request: RiskAnalysisRequest | None = None,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: RiskAnalysisService = Depends(get_risk_analysis_service),
     validation_service: EvidenceValidationService = Depends(get_evidence_validation_service),
 ) -> RiskAnalysisResponse:
+    await require_document_access(document_id, db, principal)
     request = request or RiskAnalysisRequest()
     run, findings = await service.analyze(
         document_id=document_id,
@@ -424,9 +432,11 @@ async def list_findings(
     category: str | None = Query(default=None, description="Filter by risk category"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: RiskAnalysisService = Depends(get_risk_analysis_service),
 ) -> RiskFindingListResponse:
+    await require_document_access(document_id, db, principal)
     findings, total = await service.list_findings(
         document_id=document_id,
         db=db,
@@ -451,9 +461,11 @@ async def list_findings(
 async def get_finding(
     document_id: str,
     finding_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: RiskAnalysisService = Depends(get_risk_analysis_service),
 ) -> RiskFindingResponse:
+    await require_document_access(document_id, db, principal)
     finding = await service.get_finding(
         document_id=document_id, finding_id=finding_id, db=db
     )
@@ -469,9 +481,11 @@ async def list_analysis_runs(
     document_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: RiskAnalysisService = Depends(get_risk_analysis_service),
 ) -> RiskAnalysisRunListResponse:
+    await require_document_access(document_id, db, principal)
     runs, total = await service.list_runs(
         document_id=document_id, db=db, limit=limit, offset=offset
     )
@@ -497,9 +511,11 @@ async def list_analysis_runs(
 async def validate_findings(
     document_id: str,
     request: EvidenceValidationRequest | None = None,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: EvidenceValidationService = Depends(get_evidence_validation_service),
 ) -> EvidenceValidationResponse:
+    await require_document_access(document_id, db, principal)
     request = request or EvidenceValidationRequest()
     run, findings, attempts = await service.validate(
         document_id=document_id, request=request, db=db
@@ -521,9 +537,11 @@ async def list_validation_runs(
     document_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: EvidenceValidationService = Depends(get_evidence_validation_service),
 ) -> EvidenceValidationRunListResponse:
+    await require_document_access(document_id, db, principal)
     runs, total = await service.list_runs(
         document_id=document_id, db=db, limit=limit, offset=offset
     )
@@ -542,9 +560,11 @@ async def list_validation_runs(
 async def get_validation_run(
     document_id: str,
     validation_run_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     service: EvidenceValidationService = Depends(get_evidence_validation_service),
 ) -> EvidenceValidationResponse:
+    await require_document_access(document_id, db, principal)
     run = await service.get_run(
         document_id=document_id, validation_run_id=validation_run_id, db=db
     )

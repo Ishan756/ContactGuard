@@ -51,6 +51,7 @@ async def _create_document(
         mime_type="application/pdf",
         file_hash_sha256=uuid.uuid4().hex * 2,
         status=DocumentStatus.COMPLETED,
+        owner_reviewer_id="comparison-tester",
         total_pages=1,
         total_characters=1000,
     )
@@ -170,7 +171,7 @@ async def test_comparison_requires_reviewer_auth(async_client: AsyncClient, db_s
 
 @pytest.mark.asyncio
 async def test_comparison_classifies_clause_and_finding_changes(
-    async_client: AsyncClient, db_session: AsyncSession
+    auth_client: AsyncClient, db_session: AsyncSession
 ):
     base, base_clauses = await _create_document(
         db_session,
@@ -221,7 +222,7 @@ async def test_comparison_classifies_clause_and_finding_changes(
         ],
     )
 
-    response = await async_client.post(
+    response = await auth_client.post(
         "/api/v1/comparisons",
         headers=AUTH_HEADERS,
         json={"base_document_id": base.id, "target_document_id": target.id},
@@ -244,13 +245,13 @@ async def test_comparison_classifies_clause_and_finding_changes(
     assert {"added", "removed", "modified", "unchanged"}.issubset(changed)
     assert body["affected_clause_ids"]
 
-    listed = await async_client.get(
+    listed = await auth_client.get(
         f"/api/v1/comparisons?document_id={target.id}", headers=AUTH_HEADERS
     )
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
 
-    detail = await async_client.get(
+    detail = await auth_client.get(
         f"/api/v1/comparisons/{body['comparison_id']}", headers=AUTH_HEADERS
     )
     assert detail.status_code == 200
@@ -268,7 +269,7 @@ class _RecordingRiskAnalysis:
 
 @pytest.mark.asyncio
 async def test_comparison_reruns_only_affected_target_clauses(
-    async_client: AsyncClient, db_session: AsyncSession
+    auth_client: AsyncClient, db_session: AsyncSession
 ):
     base, _ = await _create_document(
         db_session, "base.pdf", [("termination", "1. Termination", TERMINATION_OLD)]
@@ -279,7 +280,7 @@ async def test_comparison_reruns_only_affected_target_clauses(
     recorder = _RecordingRiskAnalysis()
     app.dependency_overrides[get_risk_analysis_service] = lambda: recorder
     try:
-        response = await async_client.post(
+        response = await auth_client.post(
             "/api/v1/comparisons",
             headers=AUTH_HEADERS,
             json={

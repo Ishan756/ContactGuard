@@ -16,7 +16,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationError,
 )
-from app.core.logging import get_logger
+from app.core.logging import get_logger, workflow_id_ctx_var
 from app.core.security import ReviewerPrincipal
 from app.db.models import (
     Document,
@@ -83,7 +83,7 @@ class WorkflowService:
             ).scalar_one_or_none()
             if run is None:
                 raise NotFoundError(f"Workflow '{workflow_id}' not found.")
-            if run.owner_reviewer_id != principal.reviewer_id:
+            if not principal.can_access_owned(run.owner_reviewer_id):
                 raise ForbiddenError("You are not authorized to access this workflow.")
             return run
 
@@ -223,6 +223,8 @@ class WorkflowService:
                 raise NotFoundError(
                     f"Document with ID '{request.document_id}' not found."
                 )
+            if not principal.can_access_owned(document.owner_reviewer_id):
+                raise ForbiddenError("You are not authorized to start a review of this document.")
             if document.status != DocumentStatus.COMPLETED:
                 raise ValidationError(
                     f"Document '{request.document_id}' is in status '{document.status}' "
@@ -326,11 +328,15 @@ class WorkflowService:
                     )
                 )
                 await db.commit()
+        workflow_token = workflow_id_ctx_var.set(run_id)
         try:
-            result = await self.graph.ainvoke(initial_state, config)
-            await self._apply_result(run_id, result)
-        except Exception as exc:
-            await self._fail_invocation(run_id, exc)
+            try:
+                result = await self.graph.ainvoke(initial_state, config)
+                await self._apply_result(run_id, result)
+            except Exception as exc:
+                await self._fail_invocation(run_id, exc)
+        finally:
+            workflow_id_ctx_var.reset(workflow_token)
         return await self._load_owned(run_id, principal)
 
     async def get_workflow(
@@ -347,7 +353,9 @@ class WorkflowService:
         offset: int = 0,
     ) -> tuple[list[WorkflowRun], int]:
         async with self.session_factory() as db:
-            filters = [WorkflowRun.owner_reviewer_id == principal.reviewer_id]
+            filters = []
+            if not principal.is_admin:
+                filters.append(WorkflowRun.owner_reviewer_id == principal.reviewer_id)
             if document_id:
                 filters.append(WorkflowRun.document_id == document_id)
             total = (
@@ -503,11 +511,15 @@ class WorkflowService:
                 )
                 await db.commit()
         config = self._config(workflow_id, run.max_steps)
+        workflow_token = workflow_id_ctx_var.set(workflow_id)
         try:
-            result = await self.graph.ainvoke(Command(resume=decision), config)
-            await self._apply_result(workflow_id, result)
-        except Exception as exc:
-            await self._fail_invocation(workflow_id, exc)
+            try:
+                result = await self.graph.ainvoke(Command(resume=decision), config)
+                await self._apply_result(workflow_id, result)
+            except Exception as exc:
+                await self._fail_invocation(workflow_id, exc)
+        finally:
+            workflow_id_ctx_var.reset(workflow_token)
         return await self._load_owned(workflow_id, principal)
 
     def _config(self, thread_id: str, max_steps: int) -> dict[str, Any]:

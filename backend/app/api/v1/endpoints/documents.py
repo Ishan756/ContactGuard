@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.authorization import require_document_access
 from app.core.config import Settings, get_settings
-from app.core.errors import NotFoundError
+from app.core.logging import get_logger
+from app.core.security import ReviewerPrincipal, require_reviewer
 from app.db.models import Document, DocumentChunk
 from app.db.session import get_db
 from app.schemas.document import (
@@ -19,6 +21,7 @@ from app.services.ingestion.service import DocumentIngestionService
 from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
 
+logger = get_logger("contractguard.api.documents")
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
@@ -39,6 +42,7 @@ def map_document_metadata(doc: Document) -> DocumentMetadataResponse:
         original_filename=doc.original_filename,
         file_size_bytes=doc.file_size_bytes,
         mime_type=doc.mime_type,
+        owner_reviewer_id=doc.owner_reviewer_id,
         file_hash_sha256=doc.file_hash_sha256,
         status=doc.status,
         error_message=doc.error_message,
@@ -58,10 +62,15 @@ def map_document_metadata(doc: Document) -> DocumentMetadataResponse:
 )
 async def upload_document(
     file: UploadFile = File(..., description="PDF or DOCX contract file"),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
     ingestion_service: DocumentIngestionService = Depends(get_ingestion_service),
 ) -> DocumentUploadResponse:
-    document = await ingestion_service.ingest_document(upload_file=file, db=db)
+    document = await ingestion_service.ingest_document(
+        upload_file=file,
+        db=db,
+        owner_reviewer_id=principal.reviewer_id,
+    )
 
     # Count chunks
     chunk_count_stmt = select(func.count(DocumentChunk.id)).where(
@@ -90,12 +99,23 @@ async def upload_document(
 async def list_documents(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentListResponse:
-    total_stmt = select(func.count(Document.id))
+    filters = []
+    if not principal.is_admin:
+        filters.append(Document.owner_reviewer_id == principal.reviewer_id)
+
+    total_stmt = select(func.count(Document.id)).where(*filters)
     total = (await db.execute(total_stmt)).scalar() or 0
 
-    stmt = select(Document).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+    stmt = (
+        select(Document)
+        .where(*filters)
+        .order_by(Document.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     docs = result.scalars().all()
 
@@ -112,15 +132,10 @@ async def list_documents(
 )
 async def get_document(
     document_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentMetadataResponse:
-    stmt = select(Document).where(Document.id == document_id)
-    result = await db.execute(stmt)
-    document = result.scalar_one_or_none()
-
-    if not document:
-        raise NotFoundError(f"Document with ID '{document_id}' not found.")
-
+    document = await require_document_access(document_id, db, principal)
     return map_document_metadata(document)
 
 
@@ -134,14 +149,10 @@ async def get_document_chunks(
     document_id: str,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Chunks per page"),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentTextResponse:
-    # Verify document exists
-    doc_stmt = select(Document).where(Document.id == document_id)
-    doc_res = await db.execute(doc_stmt)
-    doc = doc_res.scalar_one_or_none()
-    if not doc:
-        raise NotFoundError(f"Document with ID '{document_id}' not found.")
+    await require_document_access(document_id, db, principal)
 
     # Count total chunks
     count_stmt = select(func.count(DocumentChunk.id)).where(
@@ -196,6 +207,34 @@ async def get_document_text(
     document_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    principal: ReviewerPrincipal = Depends(require_reviewer),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentTextResponse:
-    return await get_document_chunks(document_id=document_id, page=page, page_size=page_size, db=db)
+    return await get_document_chunks(
+        document_id=document_id,
+        page=page,
+        page_size=page_size,
+        principal=principal,
+        db=db,
+    )
+
+
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an owned document and its stored file",
+)
+async def delete_document(
+    document_id: str,
+    principal: ReviewerPrincipal = Depends(require_reviewer),
+    db: AsyncSession = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_backend),
+) -> None:
+    document = await require_document_access(document_id, db, principal)
+    stored_path = document.stored_path
+    await db.delete(document)
+    await db.commit()
+    try:
+        await storage.delete_file(stored_path)
+    except Exception as exc:
+        logger.warning("Stored file cleanup failed for document %s: %s", document_id, exc)

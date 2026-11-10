@@ -135,10 +135,11 @@ export const SettingsPage: React.FC = () => {
           </form>
           <div className="card-divider" />
           <p className="muted-text">
-            Credentials are stored in browser local storage for local deployment. Use a
-            deployment-level identity provider before exposing this app outside a trusted
-            environment. API keys are never sent to the browser via environment variables in
-            production builds.
+            Reviewer keys can access only documents and reviews created under the same reviewer
+            ID. Administrative keys are required to create, update, or delete company policies
+            and may access all reviewer records. Credentials are stored in browser local storage
+            for local deployment. Use a deployment-level identity provider before exposing this
+            app outside a trusted environment.
           </p>
         </Card>
 
