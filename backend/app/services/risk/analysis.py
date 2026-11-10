@@ -584,6 +584,7 @@ class RiskAnalysisService:
         db: AsyncSession,
         retrieval_run_id: str | None = None,
         enable_model_analysis: bool | None = None,
+        clause_ids: list[str] | None = None,
     ) -> tuple[RiskAnalysisRun, list[RiskFinding]]:
         if retrieval_run_id:
             retrieval_run = await self.retrieval_service.get_run(
@@ -602,7 +603,7 @@ class RiskAnalysisService:
                 f"'{retrieval_run.status}' and cannot be analyzed."
             )
 
-        clauses = list(
+        all_clauses = list(
             (
                 await db.execute(
                     select(Clause)
@@ -613,9 +614,20 @@ class RiskAnalysisService:
             .scalars()
             .all()
         )
-        if not clauses:
+        if not all_clauses:
             raise ValidationError(
                 f"Document '{document_id}' has no extracted clauses. Run clause extraction first."
+            )
+        selected_ids = set(clause_ids) if clause_ids else None
+        clauses = (
+            [clause for clause in all_clauses if clause.id in selected_ids]
+            if selected_ids is not None
+            else all_clauses
+        )
+        if not clauses:
+            raise ValidationError(
+                "None of the requested clause identifiers belong to document "
+                f"'{document_id}'."
             )
 
         model_enabled = (
@@ -625,7 +637,7 @@ class RiskAnalysisService:
         )
         policy_versions = _parse_json_list(retrieval_run.policy_versions)
         context = await self._load_retrieval_context(retrieval_run, clauses, db)
-        clauses_by_id = {clause.id: clause for clause in clauses}
+        clauses_by_id = {clause.id: clause for clause in all_clauses}
         warnings: list[str] = []
 
         run = RiskAnalysisRun(
@@ -666,7 +678,7 @@ class RiskAnalysisService:
                         findings.append(model)
 
             existing_categories = {
-                normalize_category(clause.category)[0] for clause in clauses
+                normalize_category(clause.category)[0] for clause in all_clauses
             }
             required = await self._required_categories(retrieval_run, db)
             for requirement in required:

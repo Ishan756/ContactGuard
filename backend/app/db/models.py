@@ -748,3 +748,151 @@ class ReviewDecision(Base):
     workflow_run: Mapped["WorkflowRun"] = relationship(
         "WorkflowRun", back_populates="decisions"
     )
+
+
+class ComparisonStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class ClauseChangeType(StrEnum):
+    ADDED = "added"
+    REMOVED = "removed"
+    MODIFIED = "modified"
+    UNCHANGED = "unchanged"
+    RECLASSIFIED = "reclassified"
+
+
+class FindingChangeType(StrEnum):
+    NEW = "new"
+    RESOLVED = "resolved"
+    PERSISTED = "persisted"
+    SEVERITY_CHANGED = "severity_changed"
+
+
+class ContractComparison(Base):
+    __tablename__ = "contract_comparisons"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    base_document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=ComparisonStatus.RUNNING, index=True
+    )
+    base_analysis_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_analysis_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    clauses_added: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    clauses_removed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    clauses_modified: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    clauses_unchanged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    clauses_reclassified: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_new: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_resolved: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_persisted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_severity_changed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    affected_clause_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reanalysis_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reanalysis_performed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    warnings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    clause_changes: Mapped[list["ClauseChange"]] = relationship(
+        "ClauseChange",
+        back_populates="comparison",
+        cascade="all, delete-orphan",
+        order_by="ClauseChange.created_at",
+    )
+    finding_changes: Mapped[list["FindingChange"]] = relationship(
+        "FindingChange",
+        back_populates="comparison",
+        cascade="all, delete-orphan",
+        order_by="FindingChange.created_at",
+    )
+
+
+class ClauseChange(Base):
+    __tablename__ = "clause_changes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    comparison_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("contract_comparisons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    change_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    base_clause_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    target_clause_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    base_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    target_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    base_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    base_source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    similarity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    comparison: Mapped["ContractComparison"] = relationship(
+        "ContractComparison", back_populates="clause_changes"
+    )
+
+
+class FindingChange(Base):
+    __tablename__ = "finding_changes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    comparison_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("contract_comparisons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    change_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    finding_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    risk_category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    rule_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    base_finding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    target_finding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    base_severity: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    target_severity: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    base_validation_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    target_validation_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    contract_source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    comparison: Mapped["ContractComparison"] = relationship(
+        "ContractComparison", back_populates="finding_changes"
+    )

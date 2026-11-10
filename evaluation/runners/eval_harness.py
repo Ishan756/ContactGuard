@@ -1,7 +1,7 @@
 """Evaluation harness for benchmark testing of contract risk auditing agents."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -19,9 +19,9 @@ class ContractAuditEvaluator:
 
     def compute_accuracy(
         self,
-        predicted: List[Dict[str, Any]],
-        ground_truth: List[Dict[str, Any]],
-    ) -> List[EvaluationMetric]:
+        predicted: list[dict[str, Any]],
+        ground_truth: list[dict[str, Any]],
+    ) -> list[EvaluationMetric]:
         """Compute standard evaluation metrics between predicted risk findings and ground truth."""
         if not ground_truth:
             return [

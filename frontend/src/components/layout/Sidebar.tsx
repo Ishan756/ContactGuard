@@ -5,6 +5,7 @@ import {
   BookOpen,
   FileSearch,
   FileText,
+  GitCompare,
   LayoutDashboard,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -24,6 +25,7 @@ const primaryNav: NavItem[] = [
   { to: "/upload", label: "Upload contracts", icon: <UploadCloud size={18} />, id: "nav-upload" },
   { to: "/findings", label: "Findings", icon: <FileSearch size={18} />, id: "nav-findings" },
   { to: "/history", label: "Review history", icon: <FileText size={18} />, id: "nav-history" },
+  { to: "/comparisons", label: "Version comparison", icon: <GitCompare size={18} />, id: "nav-comparisons" },
   { to: "/policies", label: "Policy library", icon: <BookOpen size={18} />, id: "nav-policies" },
 ];
 

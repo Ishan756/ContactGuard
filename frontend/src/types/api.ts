@@ -435,3 +435,119 @@ export interface PolicyUploadMetadata {
 }
 
 export type AuthStatus = "configured" | "missing";
+
+export type ComparisonStatus = "running" | "completed" | "partial" | "failed";
+export type ClauseChangeType =
+  | "added"
+  | "removed"
+  | "modified"
+  | "unchanged"
+  | "reclassified";
+export type FindingChangeType = "new" | "resolved" | "persisted" | "severity_changed";
+
+export interface ClauseChangeResponse {
+  change_id: string;
+  change_type: ClauseChangeType;
+  category: string;
+  base_clause_id?: string | null;
+  target_clause_id?: string | null;
+  base_category?: string | null;
+  target_category?: string | null;
+  base_source_text?: string | null;
+  target_source_text?: string | null;
+  base_source_reference?: string | null;
+  target_source_reference?: string | null;
+  similarity: number;
+  change_summary: string;
+  created_at: string;
+}
+
+export interface FindingChangeResponse {
+  change_id: string;
+  change_type: FindingChangeType;
+  finding_type: FindingType;
+  risk_category: string;
+  rule_id?: string | null;
+  base_finding_id?: string | null;
+  target_finding_id?: string | null;
+  base_severity?: string | null;
+  target_severity?: string | null;
+  base_validation_status?: string | null;
+  target_validation_status?: string | null;
+  contract_source_reference?: string | null;
+  explanation: string;
+  created_at: string;
+}
+
+export interface ContractComparisonResponse {
+  comparison_id: string;
+  base_document_id: string;
+  target_document_id: string;
+  created_by: string;
+  status: ComparisonStatus;
+  base_analysis_run_id?: string | null;
+  target_analysis_run_id?: string | null;
+  clauses_added: number;
+  clauses_removed: number;
+  clauses_modified: number;
+  clauses_unchanged: number;
+  clauses_reclassified: number;
+  findings_new: number;
+  findings_resolved: number;
+  findings_persisted: number;
+  findings_severity_changed: number;
+  affected_clause_ids: string[];
+  reanalysis_requested: boolean;
+  reanalysis_performed: boolean;
+  warnings: string[];
+  error_message?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  clause_changes: ClauseChangeResponse[];
+  finding_changes: FindingChangeResponse[];
+  notice: string;
+}
+
+export interface ContractComparisonListResponse {
+  comparisons: ContractComparisonResponse[];
+  total: number;
+}
+
+export interface ContractComparisonRequest {
+  base_document_id: string;
+  target_document_id: string;
+  reanalyze_target?: boolean;
+}
+
+export interface EvaluationAgentSummary {
+  model?: string | null;
+  mode?: string | null;
+  findings: Record<string, unknown>;
+  clause_extraction: Record<string, unknown>;
+}
+
+export interface EvaluationBenchmarkSummary {
+  name?: string | null;
+  description?: string | null;
+  contracts: number;
+  policies: number;
+  ground_truth_findings: number;
+}
+
+export interface EvaluationSummaryResponse {
+  available: boolean;
+  reason?: string | null;
+  schema_version?: string | null;
+  dataset_version?: string | null;
+  dataset_sha256?: string | null;
+  prompt_version?: string | null;
+  model_config_version?: string | null;
+  generated_at?: string | null;
+  git_commit?: string | null;
+  mode?: string | null;
+  benchmark: EvaluationBenchmarkSummary;
+  agents: Record<string, EvaluationAgentSummary>;
+  delta: Record<string, unknown>;
+  limitations: string[];
+  notice?: string | null;
+}

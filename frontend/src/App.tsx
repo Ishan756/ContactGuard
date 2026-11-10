@@ -8,6 +8,7 @@ import { FindingsPage } from "./pages/FindingsPage";
 import { FindingDetailPage } from "./pages/FindingDetailPage";
 import { PolicyLibraryPage } from "./pages/PolicyLibraryPage";
 import { ReviewHistoryPage } from "./pages/ReviewHistoryPage";
+import { VersionComparisonPage } from "./pages/VersionComparisonPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -24,6 +25,7 @@ export const App: React.FC = () => {
           <Route path="findings/:documentId/:findingId" element={<FindingDetailPage />} />
           <Route path="policies" element={<PolicyLibraryPage />} />
           <Route path="history" element={<ReviewHistoryPage />} />
+          <Route path="comparisons" element={<VersionComparisonPage />} />
           <Route path="health" element={<SystemHealthPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

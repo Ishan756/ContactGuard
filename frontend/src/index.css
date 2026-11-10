@@ -1925,6 +1925,135 @@ a.btn {
   font-weight: 600;
 }
 
+/* Version comparison and evaluation summary */
+.text-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.evaluation-card {
+  margin-bottom: 1.25rem;
+}
+
+.evaluation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.85rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.evaluation-table td:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-positive {
+  color: #6ee7b7;
+  font-weight: 700;
+}
+
+.metric-negative {
+  color: #fda4af;
+  font-weight: 700;
+}
+
+.evaluation-limitations {
+  margin-top: 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-right: 0.2rem;
+}
+
+.change-item {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 0.85rem;
+}
+
+.change-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.change-item-head strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.change-summary {
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.change-quote {
+  margin-top: 0.6rem;
+  border-left: 3px solid var(--border-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 0.55rem 0.7rem;
+}
+
+.change-quote > span {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.change-quote p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.change-quote-base {
+  background: rgba(244, 63, 94, 0.06);
+  border-left-color: #fb7185;
+}
+
+.change-quote-target {
+  background: rgba(16, 185, 129, 0.06);
+  border-left-color: #6ee7b7;
+}
+
+.change-severity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-transform: capitalize;
+}
+
+.change-severity > span:first-child {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* Responsive */
 @media (max-width: 1100px) {
   .dashboard-grid-wide,

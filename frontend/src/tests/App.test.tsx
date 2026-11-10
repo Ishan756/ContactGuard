@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import App from "../App";
+import { evaluationSummaryFixture } from "./fixtures";
 
 function jsonResponse(payload: unknown): Response {
   return {
@@ -36,6 +37,9 @@ describe("App Shell and Routing", () => {
           },
         });
       }
+      if (url.includes("/api/v1/evaluation/summary")) {
+        return jsonResponse(evaluationSummaryFixture);
+      }
       if (url.includes("/api/v1/workflows")) {
         return jsonResponse({ runs: [], total: 0 });
       }
@@ -63,6 +67,7 @@ describe("App Shell and Routing", () => {
     expect(document.getElementById("nav-upload")).toHaveTextContent("Upload contracts");
     expect(document.getElementById("nav-findings")).toHaveTextContent("Findings");
     expect(document.getElementById("nav-history")).toHaveTextContent("Review history");
+    expect(document.getElementById("nav-comparisons")).toHaveTextContent("Version comparison");
     expect(document.getElementById("nav-policies")).toHaveTextContent("Policy library");
     expect(document.getElementById("nav-health")).toHaveTextContent("System health");
     expect(document.getElementById("nav-settings")).toHaveTextContent("Settings");
@@ -76,5 +81,22 @@ describe("App Shell and Routing", () => {
       expect(screen.getByText("No workflow runs")).toBeInTheDocument();
       expect(screen.getByText("No contracts uploaded")).toBeInTheDocument();
     });
+  });
+
+  it("renders the evaluation benchmark summary with computed metrics", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Evaluation benchmark")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Single-LLM baseline")).toBeInTheDocument();
+    expect(screen.getByText("Multi-agent workflow")).toBeInTheDocument();
+    expect(screen.getByText("Finding precision")).toBeInTheDocument();
+    expect(screen.getByText("Citation validity")).toBeInTheDocument();
+    expect(screen.getByText("Deterministic mock")).toBeInTheDocument();
+    expect(
+      screen.getByText(/do not establish legal correctness/)
+    ).toBeInTheDocument();
   });
 });

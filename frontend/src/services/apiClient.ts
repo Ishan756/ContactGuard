@@ -2,10 +2,14 @@ import { getReviewerAuth } from "./session";
 import type {
   APIErrorResponse,
   ClauseListResponse,
+  ContractComparisonListResponse,
+  ContractComparisonRequest,
+  ContractComparisonResponse,
   DocumentListResponse,
   DocumentMetadataResponse,
   DocumentTextResponse,
   DocumentUploadResponse,
+  EvaluationSummaryResponse,
   LiveHealthResponse,
   PolicyCreateRequest,
   PolicyListResponse,
@@ -327,6 +331,36 @@ export class ContractGuardApiClient {
       auth: "reviewer",
       idempotencyKey: idempotencyKey || request.command_id,
     });
+  }
+
+  public async listComparisons(
+    params: { documentId?: string; limit?: number; offset?: number } = {}
+  ): Promise<ContractComparisonListResponse> {
+    return this.request<ContractComparisonListResponse>(
+      `/api/v1/comparisons${queryString({
+        document_id: params.documentId,
+        limit: params.limit ?? 20,
+        offset: params.offset ?? 0,
+      })}`
+    );
+  }
+
+  public async createComparison(
+    request: ContractComparisonRequest
+  ): Promise<ContractComparisonResponse> {
+    return this.request<ContractComparisonResponse>("/api/v1/comparisons", {
+      method: "POST",
+      body: JSON.stringify(request),
+      auth: "reviewer",
+    });
+  }
+
+  public async getComparison(comparisonId: string): Promise<ContractComparisonResponse> {
+    return this.request<ContractComparisonResponse>(`/api/v1/comparisons/${comparisonId}`);
+  }
+
+  public async getEvaluationSummary(): Promise<EvaluationSummaryResponse> {
+    return this.request<EvaluationSummaryResponse>("/api/v1/evaluation/summary");
   }
 }
 

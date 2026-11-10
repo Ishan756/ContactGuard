@@ -40,7 +40,8 @@ ContactGuard/
 |   |   |   |-- layout/          # DashboardLayout, Sidebar, Header
 |   |   |   +-- ui/              # Card, Button, Badge, state and status components
 |   |   |-- pages/               # Dashboard, Upload, Contract Review, Findings,
-|   |   |                        # Policy Library, Review History, Health, Settings
+|   |   |                        # Policy Library, Review History, Version Comparison,
+|   |   |                        # Health, Settings
 |   |   |-- services/
 |   |   |   |-- apiClient.ts     # Typed API client with auth, request IDs, idempotency
 |   |   |   +-- session.ts       # Reviewer credential persistence
@@ -68,11 +69,12 @@ ContactGuard/
 |   |-- clause_extraction.md    # Clause Extraction Agent configuration and examples
 |   +-- risk_analysis.md        # Policy Retrieval and Risk Analysis Agent rules/API
 |
-|-- evaluation/                  # Benchmark datasets and evaluation harnesses
-|   |-- benchmarks/
-|   |   +-- sample_contracts/    # Benchmark contracts repository
-|   |-- runners/
-|   |   +-- eval_harness.py      # Automated benchmark precision/recall harness
+|-- evaluation/                  # Isolated, versioned benchmark code and reports
+|   |-- benchmarks/v1/           # Synthetic contracts, policies, ground-truth findings
+|   |-- config/                  # Versioned prompts and model configuration
+|   |-- runners/                 # Benchmark CLI, agents, retrieval harness
+|   |-- reports/                 # Generated JSON/CSV reports
+|   |-- tests/                   # Metric, agent, and report tests
 |   +-- README.md
 |
 |-- .github/
@@ -153,12 +155,15 @@ The React workspace is backed exclusively by the FastAPI API:
 - **Policy library** — policy creation, PDF/DOCX upload, version/status display, and
   semantic retrieval testing.
 - **Review history** — reviewer decisions, retries, revisions, and completion history.
+- **Version comparison** — deterministic clause matching, classification/finding diffs,
+  and optional affected-clause re-analysis across contract versions.
 - **Settings** — local reviewer identity, protected workflow API key, live readiness.
 - **System health** — live liveness/readiness and component latency.
 
 Unverified findings are explicitly labelled, model explanations are visually separated
 from verbatim contract quotations, and workflow actions send `X-Reviewer-ID` and
-`X-Workflow-Key` headers. Frontend tests mock the API boundary with synthetic fixtures:
+`X-Workflow-Key` headers. The dashboard also shows the latest versioned evaluation
+benchmark summary. Frontend tests mock the API boundary with synthetic fixtures:
 
 ```bash
 cd frontend
@@ -175,7 +180,14 @@ npm run build
 ```bash
 cd backend
 .\.venv\Scripts\pytest tests -v
-.\.venv\Scripts\ruff check app tests
+.\.venv\Scripts\ruff check app tests ../evaluation
+```
+
+### Evaluation Benchmark Tests & Mock Run
+```bash
+# From the repository root
+pytest evaluation/tests -q
+python evaluation/runners/benchmark.py --format both
 ```
 
 ### Frontend Typecheck, Tests & Build
@@ -242,6 +254,35 @@ verification and never executes legal or contractual actions.
 
 See [docs/workflow.md](docs/workflow.md) for the Mermaid graph, checkpoint configuration,
 API examples, idempotency, and human-review lifecycle.
+
+---
+
+## Contract Version Comparison
+
+`POST /api/v1/comparisons` deterministically matches extracted clauses across an earlier
+and a newer document using sequence similarity, then classifies added, removed, modified,
+unchanged, and reclassified clauses. It also diffs the latest risk findings into new,
+resolved, persisted, and severity-changed findings. Optional re-analysis runs only on
+affected target clauses, creates a new analysis run, and preserves prior audit history.
+Comparison output identifies textual and finding-level changes; it is not a legal opinion.
+
+The frontend Version Comparison page lets reviewers choose two uploaded versions, request
+affected-clause re-analysis, inspect before/after clause text, and review finding changes.
+
+---
+
+## Evaluation Benchmark
+
+The isolated `evaluation/` module runs a versioned synthetic benchmark comparing a
+single-LLM baseline with the multi-agent workflow. It computes precision, recall, F1,
+severity agreement, citation validity, unsupported-legal-claim rate, and clause extraction
+metrics from actual agent outputs. Reports include dataset/prompt/model config hashes, git
+commit, mode, limitations, and a non-legal-advice notice.
+
+Mock mode is deterministic for CI; live mode is optional and requires model credentials.
+Results measure agreement with synthetic annotations, not legal correctness. The latest
+report is exposed by `GET /api/v1/evaluation/summary` and summarized on the dashboard. See
+[evaluation/README.md](evaluation/README.md).
 
 ---
 

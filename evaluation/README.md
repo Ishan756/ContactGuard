@@ -1,48 +1,100 @@
-# ContractGuard — Evaluation Framework
+# ContractGuard — Evaluation Benchmark
 
-The `evaluation/` module is dedicated to measuring the accuracy, precision, recall, and calibration of ContractGuard's contract risk assessments and agent outputs against standardized benchmark legal datasets.
+The `evaluation/` module contains isolated, versioned benchmark code and reports. It
+compares a single-LLM baseline with ContractGuard's multi-agent workflow using synthetic
+contracts and policy annotations.
+
+**These metrics measure agreement with synthetic annotations. They do not measure legal
+correctness, enforceability, or fitness for legal advice.**
 
 ## Directory Structure
 
 ```
 evaluation/
 |-- benchmarks/
-|   |-- sample_contracts/      # Curated benchmark agreements (NDAs, MSAs, SLA)
-|   +-- ground_truth.json      # Verified human-attorney labeled clause risks
+|   +-- v1/
+|       +-- dataset.json          # Versioned synthetic contracts, policies, annotations
+|-- config/
+|   |-- prompts.v1.json           # Versioned prompt text/version metadata
+|   +-- model_config.v1.json      # Versioned model/evaluation configuration
 |-- runners/
-|   +-- eval_harness.py        # Automated test harness computing agent metrics
+|   |-- agents.py                 # Deterministic baseline/multi-agent + optional live adapters
+|   |-- benchmark.py              # Reproducible JSON/CSV benchmark CLI
+|   |-- eval_harness.py           # Legacy accuracy harness scaffold
+|   +-- eval_policy_retrieval.py  # Policy retrieval Recall@k / MRR benchmark
+|-- reports/
+|   |-- latest.json               # Generated report (metadata + computed metrics)
+|   +-- latest.csv                # Long-form metric export
+|-- tests/                        # Evaluation metric, agent, and report tests
 +-- README.md
 ```
 
-## Metrics Tracked
-- **Clause Extraction Recall**: Percentage of relevant risk clauses properly isolated.
-- **Risk Severity Alignment**: Mean squared error between AI-assigned risk score (0-100) and attorney consensus.
-- **Hallucination Rate**: Citations checked against actual document source text.
-- **Policy Retrieval Quality**: Recall@k and Mean Reciprocal Rank (MRR) measuring retrieval accuracy against enterprise policy rules.
+## Reproducible Benchmark
 
-## Policy Knowledge Base Retrieval Benchmark
+The default mock mode is deterministic and suitable for CI. It is not a substitute for
+live model evaluation.
 
-The benchmark runner is located at `evaluation/runners/eval_policy_retrieval.py`. It measures how effectively the embedding model and vector search rank ground-truth policy passages for individual target clauses across Liability, Intellectual Property, and Termination categories.
+```bash
+# From the repository root
+python evaluation/runners/benchmark.py
 
-### Baseline Benchmark Results
+# Explicit outputs
+python evaluation/runners/benchmark.py \
+  --dataset evaluation/benchmarks/v1/dataset.json \
+  --format both \
+  --output evaluation/reports/latest.json \
+  --csv-output evaluation/reports/latest.csv
 
-Evaluated over synthetic enterprise policies and target clauses:
+# Optional live model run (requires GEMINI_API_KEY and network access)
+python evaluation/runners/benchmark.py --mode live --format json
+```
 
-| Metric | Score | Baseline Target |
-| :--- | :--- | :--- |
-| **Recall@1** | 0.3333 | - |
-| **Recall@3** | 0.6667 | >= 0.60 |
-| **Recall@5** | 0.8333 | >= 0.80 |
-| **MRR (Mean Reciprocal Rank)** | 0.5056 | >= 0.50 |
+The report records the dataset, prompt, and model-config versions and SHA-256 hashes, the
+git commit, generation timestamp (or `SOURCE_DATE_EPOCH`), mode, benchmark size, per-agent
+metrics, metric deltas, limitations, and a non-legal-advice notice. Report JSON is served
+read-only by `GET /api/v1/evaluation/summary` and summarized on the frontend dashboard.
 
-### Reproducing the Measurements
+## Metrics
 
-Run the evaluation runner directly using Python:
+Metrics are computed from predicted findings and annotations; values are never hardcoded.
+
+- **Finding precision / recall / F1** — deterministic finding-key matching on contract,
+  category, finding type, and rule ID.
+- **Severity agreement** — exact severity match among true-positive findings.
+- **Citation validity** — contract and policy quotes checked verbatim against source text.
+- **Unsupported legal claim rate** — explanations asserting illegality/voidness/
+  unenforceability, which ContractGuard explicitly avoids.
+- **Clause extraction precision / recall / F1** — category-level extraction comparison.
+- **Metric delta** — multi-agent minus baseline for each finding metric.
+
+The multi-agent mock path exercises the real backend `RiskRuleEngine`, missing-clause
+generation, citation validation, and legal-claim sanitization. The baseline mock is a
+single-pass heuristic with deliberate weaknesses (wrong severities, generic invalid policy
+quotes, no missing-clause detection, a false-positive confidentiality concern, and an
+unsupported legal conclusion). Live adapters call the configured `LLMProvider` but are
+never run by tests or CI.
+
+## Tests
+
+```bash
+# From the repository root; requires the backend dev environment
+pytest evaluation/tests -q
+```
+
+## Policy Retrieval Benchmark
+
+`evaluation/runners/eval_policy_retrieval.py` measures deterministic-embedding policy
+retrieval with Recall@1/3/5 and MRR over synthetic policy passages:
+
 ```bash
 python evaluation/runners/eval_policy_retrieval.py
 ```
 
-Or verify with pytest:
-```bash
-pytest evaluation/runners/eval_policy_retrieval.py -v
-```
+## Limitations
+
+- Three synthetic contracts and nine annotated findings are a smoke/regression benchmark,
+  not a statistically meaningful legal dataset.
+- The deterministic baseline and agents are simulations; mock-mode improvements do not
+  demonstrate live-model quality.
+- Legal correctness, enforceability, and jurisdiction-specific compliance are out of
+  scope. Results must not be presented as legal advice.

@@ -255,6 +255,15 @@ class Settings(BaseSettings):
         description="Default maximum policy passages returned per query",
     )
 
+    # Evaluation Benchmark Reports
+    evaluation_report_path: str | None = Field(
+        default=None,
+        description=(
+            "Optional path to the evaluation report JSON. Defaults to "
+            "../evaluation/reports/latest.json relative to the repository root."
+        ),
+    )
+
     # Document Storage & Ingestion Limits
     upload_dir: str = Field(
         default="data/uploads",

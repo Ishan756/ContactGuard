@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   CheckCircle2,
   Clock3,
   FileSearch,
@@ -19,13 +20,40 @@ import { apiClient, ApiClientError } from "../services/apiClient";
 import { getReviewerAuth } from "../services/session";
 import type {
   DocumentMetadataResponse,
+  EvaluationSummaryResponse,
   RiskPriority,
   WorkflowRunResponse,
   WorkflowStatus,
 } from "../types/api";
-import { formatBytes, formatRelative, severityTone, titleCase } from "../utils/format";
+import {
+  formatBytes,
+  formatDate,
+  formatRelative,
+  severityTone,
+  titleCase,
+} from "../utils/format";
 
 const severityKeys: RiskPriority[] = ["critical", "high", "medium", "low", "informational"];
+const evaluationMetricKeys = [
+  "precision",
+  "recall",
+  "f1",
+  "citation_validity",
+  "unsupported_claim_rate",
+] as const;
+
+const evaluationMetricLabels: Record<(typeof evaluationMetricKeys)[number], string> = {
+  precision: "Finding precision",
+  recall: "Finding recall",
+  f1: "F1 score",
+  citation_validity: "Citation validity",
+  unsupported_claim_rate: "Unsupported legal claims",
+};
+
+function numericMetric(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 const workflowKeys: WorkflowStatus[] = [
   "awaiting_review",
   "running",
@@ -41,6 +69,7 @@ export const DashboardOverview: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowRunResponse[]>([]);
   const [documentTotal, setDocumentTotal] = useState(0);
   const [workflowTotal, setWorkflowTotal] = useState(0);
+  const [evaluation, setEvaluation] = useState<EvaluationSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -49,9 +78,10 @@ export const DashboardOverview: React.FC = () => {
     setLoading(true);
     setError(null);
     setWorkflowError(null);
-    const [documentsResult, workflowsResult] = await Promise.allSettled([
+    const [documentsResult, workflowsResult, evaluationResult] = await Promise.allSettled([
       apiClient.listDocuments(12, 0),
       apiClient.listWorkflows({ limit: 30 }),
+      apiClient.getEvaluationSummary(),
     ]);
 
     if (documentsResult.status === "fulfilled") {
@@ -76,6 +106,12 @@ export const DashboardOverview: React.FC = () => {
           ? workflowsResult.reason.message
           : "Unable to load workflow runs."
       );
+    }
+
+    if (evaluationResult.status === "fulfilled") {
+      setEvaluation(evaluationResult.value);
+    } else {
+      setEvaluation(null);
     }
     setLoading(false);
   }, []);
@@ -119,6 +155,26 @@ export const DashboardOverview: React.FC = () => {
   const recentRuns = workflows.slice(0, 6);
   const recentDocuments = documents.slice(0, 6);
   const auth = getReviewerAuth();
+
+  const evaluationRows = useMemo(() => {
+    if (!evaluation?.available) return [];
+    const baseline = evaluation.agents.baseline?.findings ?? {};
+    const multiAgent = evaluation.agents.multi_agent?.findings ?? {};
+    return evaluationMetricKeys.map((key) => {
+      const baselineValue = numericMetric(baseline[key]);
+      const multiAgentValue = numericMetric(multiAgent[key]);
+      return {
+        key,
+        label: evaluationMetricLabels[key],
+        baseline: baselineValue,
+        multiAgent: multiAgentValue,
+        delta:
+          baselineValue !== null && multiAgentValue !== null
+            ? multiAgentValue - baselineValue
+            : null,
+      };
+    });
+  }, [evaluation]);
 
   if (loading) {
     return <LoadingState label="Loading dashboard…" />;
@@ -271,6 +327,97 @@ export const DashboardOverview: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      <Card
+        className="evaluation-card"
+        title="Evaluation benchmark"
+        subtitle="Versioned synthetic benchmark comparing the single-LLM baseline with the multi-agent workflow"
+        action={
+          evaluation?.available ? (
+            <ToneBadge tone={evaluation.mode === "live" ? "warning" : "info"}>
+              {evaluation.mode === "live" ? "Live model run" : "Deterministic mock"}
+            </ToneBadge>
+          ) : undefined
+        }
+      >
+        {!evaluation?.available ? (
+          <EmptyState
+            icon={<BarChart3 size={26} />}
+            title="Evaluation summary unavailable"
+            description={
+              evaluation?.reason ||
+              "Run the evaluation benchmark CLI to generate a versioned report."
+            }
+          />
+        ) : (
+          <>
+            <div className="evaluation-meta">
+              <span>
+                Dataset <strong>{evaluation.dataset_version || "unknown"}</strong> ·{" "}
+                {evaluation.benchmark.contracts} contracts ·{" "}
+                {evaluation.benchmark.ground_truth_findings} annotated findings
+              </span>
+              <span>
+                Generated {formatDate(evaluation.generated_at)} · mode{" "}
+                {evaluation.mode || "unknown"}
+              </span>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table evaluation-table">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Single-LLM baseline</th>
+                    <th>Multi-agent workflow</th>
+                    <th>Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {evaluationRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>{row.label}</td>
+                      <td>{row.baseline === null ? "—" : row.baseline.toFixed(4)}</td>
+                      <td>
+                        {row.multiAgent === null ? "—" : row.multiAgent.toFixed(4)}
+                      </td>
+                      <td
+                        className={
+                          row.delta === null
+                            ? ""
+                            : row.delta > 0
+                              ? "metric-positive"
+                              : row.delta < 0
+                                ? "metric-negative"
+                                : ""
+                        }
+                      >
+                        {row.delta === null
+                          ? "—"
+                          : `${row.delta > 0 ? "+" : ""}${row.delta.toFixed(4)}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="card-divider" />
+            <div className="insight-row">
+              <BarChart3 size={16} />
+              <span>
+                {evaluation.notice ||
+                  "Benchmark results compare synthetic annotations, not legal correctness."}
+              </span>
+            </div>
+            {evaluation.limitations.length > 0 && (
+              <ul className="plain-list evaluation-limitations">
+                {evaluation.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </Card>
 
       <div className="dashboard-grid dashboard-grid-wide">
         <Card

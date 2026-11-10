@@ -29,11 +29,14 @@ jobs:
 
       - name: Run Ruff Lint
         working-directory: backend
-        run: ruff check app tests
+        run: ruff check app tests ../evaluation
 
       - name: Run Pytest
         working-directory: backend
         run: pytest tests -v
+
+      - name: Run Evaluation Tests
+        run: pytest evaluation/tests -q
 
   frontend:
     name: Frontend Lint, Typecheck & Tests

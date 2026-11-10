@@ -1,0 +1,376 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_version": "v1",
+  "dataset_path": "evaluation/benchmarks/v1/dataset.json",
+  "dataset_sha256": "a5c729f8b30c247a0d050a365a412cb17ce8f991968a3ebc707b28c0c308c20e",
+  "prompt_version": "v1",
+  "prompt_sha256": "b84ea3aa78034d21fffa92b6fc6a9c17e49332bb20d01caad2355c980d16ab4d",
+  "model_config_version": "v1",
+  "model_config_sha256": "1aebb3c405c137ba214abf9083530b18086a1ccabe62a696834d4ad7573c0ad3",
+  "generated_at": "2026-11-09T08:31:45.742148+00:00",
+  "git_commit": "f2ff859cabe22ae162f201b9a7d5c98ccdd3eac1",
+  "mode": "mock",
+  "benchmark": {
+    "name": "single-llm-baseline-vs-multi-agent",
+    "description": "Synthetic, non-production contract review benchmark for deterministic regression testing. It is not a legal dataset and does not measure legal correctness.",
+    "contracts": 3,
+    "policies": 4,
+    "ground_truth_findings": 9
+  },
+  "agents": {
+    "baseline": {
+      "model": "mock-single-llm-baseline",
+      "mode": "single_llm",
+      "findings": {
+        "true_positives": 5,
+        "false_positives": 2,
+        "false_negatives": 4,
+        "precision": 0.7143,
+        "recall": 0.5556,
+        "f1": 0.625,
+        "severity_agreement": 0.0,
+        "citation_validity": 0.5,
+        "contract_citation_validity": 1.0,
+        "policy_citation_validity": 0.0,
+        "unsupported_claim_rate": 0.1429,
+        "predictions": 7,
+        "ground_truth": 9,
+        "per_contract": {
+          "acme-msa-v1": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 1
+          },
+          "beta-saas-v1": {
+            "tp": 1,
+            "fp": 0,
+            "fn": 1
+          },
+          "gamma-nda-v1": {
+            "tp": 1,
+            "fp": 2,
+            "fn": 2
+          }
+        }
+      },
+      "clause_extraction": {
+        "true_positives": 11,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "per_contract": {
+          "acme-msa-v1": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0
+          },
+          "beta-saas-v1": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0
+          },
+          "gamma-nda-v1": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0
+          }
+        }
+      },
+      "predictions": [
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_unlimited",
+          "severity": "high",
+          "contract_quote": "The vendor's aggregate liability under this Agreement shall be unlimited for any direct or indirect damages.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "Unlimited liability is unlawful and void under this agreement.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "medium",
+          "contract_quote": "Company may terminate this Agreement for convenience with fifteen (15) days' prior written notice.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "The termination notice of 15 days is shorter than policy.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "payment",
+          "rule_id": "payment_period_exceeds_policy",
+          "severity": "low",
+          "contract_quote": "Customer shall pay all undisputed invoices within sixty (60) days of receipt.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "The payment period of 60 days exceeds policy.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "beta-saas-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_cap_exceeds_policy",
+          "severity": "medium",
+          "contract_quote": "Vendor's aggregate liability shall be limited to twenty-four (24) months of fees paid.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "The liability period of 24 months may exceed policy.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "possible_legal_concern",
+          "risk_category": "confidentiality",
+          "rule_id": "baseline_confidentiality_concern",
+          "severity": "medium",
+          "contract_quote": "The vendor may disclose Confidential Information to subcontractors without prior written approval from the Company.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "Disclosure without approval is a potential concern for review.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_cap_exceeds_policy",
+          "severity": "medium",
+          "contract_quote": "Neither party's aggregate liability shall exceed the fees paid in the preceding twelve (12) months.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "The liability period of 12 months may exceed policy.",
+          "source": "baseline"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "medium",
+          "contract_quote": "Either party may terminate for convenience upon ten (10) days' prior written notice.",
+          "policy_quote": "Company policy requires compliance with all applicable requirements.",
+          "policy_id": null,
+          "explanation": "The termination notice of 10 days is shorter than policy.",
+          "source": "baseline"
+        }
+      ]
+    },
+    "multi_agent": {
+      "model": "policy-rule-engine + deterministic-validator",
+      "mode": "multi_agent",
+      "findings": {
+        "true_positives": 9,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "severity_agreement": 1.0,
+        "citation_validity": 1.0,
+        "contract_citation_validity": 1.0,
+        "policy_citation_validity": 1.0,
+        "unsupported_claim_rate": 0.0,
+        "predictions": 9,
+        "ground_truth": 9,
+        "per_contract": {
+          "acme-msa-v1": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0
+          },
+          "beta-saas-v1": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 0
+          },
+          "gamma-nda-v1": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0
+          }
+        }
+      },
+      "clause_extraction": {
+        "true_positives": 11,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "per_contract": {
+          "acme-msa-v1": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0
+          },
+          "beta-saas-v1": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0
+          },
+          "gamma-nda-v1": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0
+          }
+        }
+      },
+      "predictions": [
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_unlimited",
+          "severity": "critical",
+          "contract_quote": "The vendor's aggregate liability under this Agreement shall be unlimited for any direct or indirect damages.",
+          "policy_quote": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid under the agreement. Unlimited or uncapped liability is not permitted.",
+          "policy_id": null,
+          "policy_version": null,
+          "explanation": "The contract contains unlimited liability while the active policy requires a cap of 12 months of fees. This requires human review against the policy.",
+          "suggested_question": "Can liability be capped in line with the active policy before signature?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "high",
+          "contract_quote": "Company may terminate this Agreement for convenience with fifteen (15) days' prior written notice.",
+          "policy_quote": "Vendor agreements must provide at least thirty (30) days' prior written notice before termination for convenience.",
+          "policy_id": null,
+          "policy_version": null,
+          "explanation": "The contract permits termination on 15 days' notice, while the active policy requires at least 30 days' notice.",
+          "suggested_question": "Can the termination notice period be increased from 15 to 30 days?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "payment",
+          "rule_id": "payment_period_exceeds_policy",
+          "severity": "medium",
+          "contract_quote": "Customer shall pay all undisputed invoices within sixty (60) days of receipt.",
+          "policy_quote": "All vendor invoices must be paid within thirty (30) days of receipt.",
+          "policy_id": null,
+          "policy_version": null,
+          "explanation": "The contract allows 60 days to pay, while the active policy requires payment within 30 days.",
+          "suggested_question": "Can the payment period be shortened from 60 to 30 days?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "acme-msa-v1",
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "policy_id": "pol-data-protection-1",
+          "policy_version": "1.0.0",
+          "explanation": "The active policy 'Vendor Data Protection Requirement' requires data protection coverage, but no such clause was extracted from the contract.",
+          "suggested_question": "Should the contract include a data protection clause required by the active policy 'Vendor Data Protection Requirement'?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "beta-saas-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_cap_exceeds_policy",
+          "severity": "high",
+          "contract_quote": "Vendor's aggregate liability shall be limited to twenty-four (24) months of fees paid.",
+          "policy_quote": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid under the agreement.",
+          "policy_id": null,
+          "policy_version": null,
+          "explanation": "The contract caps liability at 24 months of fees, while the active policy requires a cap of no more than 12 months.",
+          "suggested_question": "Can the liability cap be reduced from 24 to 12 months?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "beta-saas-v1",
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "policy_id": "pol-data-protection-1",
+          "policy_version": "1.0.0",
+          "explanation": "The active policy 'Vendor Data Protection Requirement' requires data protection coverage, but no such clause was extracted from the contract.",
+          "suggested_question": "Should the contract include a data protection clause required by the active policy 'Vendor Data Protection Requirement'?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "high",
+          "contract_quote": "Either party may terminate for convenience upon ten (10) days' prior written notice.",
+          "policy_quote": "Vendor agreements must provide at least thirty (30) days' prior written notice before termination for convenience.",
+          "policy_id": null,
+          "policy_version": null,
+          "explanation": "The contract permits termination on 10 days' notice, while the active policy requires at least 30 days' notice.",
+          "suggested_question": "Can the termination notice period be increased from 10 to 30 days?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "missing_clause",
+          "risk_category": "payment",
+          "rule_id": "required_category_missing:payment",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_quote": "All vendor invoices must be paid within thirty (30) days of receipt.",
+          "policy_id": "pol-payment-1",
+          "policy_version": "1.0.0",
+          "explanation": "The active policy 'Vendor Payment Terms Standard' requires payment coverage, but no such clause was extracted from the contract.",
+          "suggested_question": "Should the contract include a payment clause required by the active policy 'Vendor Payment Terms Standard'?",
+          "source": "multi_agent"
+        },
+        {
+          "contract_id": "gamma-nda-v1",
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "policy_id": "pol-data-protection-1",
+          "policy_version": "1.0.0",
+          "explanation": "The active policy 'Vendor Data Protection Requirement' requires data protection coverage, but no such clause was extracted from the contract.",
+          "suggested_question": "Should the contract include a data protection clause required by the active policy 'Vendor Data Protection Requirement'?",
+          "source": "multi_agent"
+        }
+      ]
+    }
+  },
+  "delta": {
+    "findings": {
+      "precision": 0.2857,
+      "recall": 0.4444,
+      "f1": 0.375,
+      "severity_agreement": 1.0,
+      "citation_validity": 0.5,
+      "unsupported_claim_rate": -0.1429
+    },
+    "clause_extraction_recall": 0.0
+  },
+  "limitations": [
+    "The dataset is synthetic and small; it is a regression benchmark, not a legal dataset.",
+    "Metrics measure agreement with synthetic annotations, not legal correctness or enforceability.",
+    "Mock mode is deterministic and intended for CI; it does not measure live model quality.",
+    "Live mode is optional and depends on external model availability and credentials."
+  ],
+  "notice": "Benchmark results compare synthetic annotations. They do not establish legal correctness and must not be presented as legal advice."
+}

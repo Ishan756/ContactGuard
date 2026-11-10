@@ -1,15 +1,16 @@
 """Policy evaluation benchmarks computing Recall@k and Mean Reciprocal Rank (MRR)."""
 
-from dataclasses import dataclass
 import math
-from pathlib import Path
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # Ensure backend package is in python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "backend"))
 
 import pytest
+
 from app.core.embeddings.mock import DeterministicEmbeddingProvider
 from app.services.policy.chunker import PolicyChunker
 

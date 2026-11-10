@@ -1,0 +1,208 @@
+{
+  "version": "v1",
+  "description": "Synthetic, non-production contract review benchmark for deterministic regression testing. It is not a legal dataset and does not measure legal correctness.",
+  "policies": [
+    {
+      "policy_id": "pol-liability-1",
+      "name": "Corporate Limitation of Liability Standard",
+      "version": "1.0.0",
+      "category": "liability",
+      "text": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid under the agreement. Unlimited or uncapped liability is not permitted."
+    },
+    {
+      "policy_id": "pol-termination-1",
+      "name": "Term and Termination Guidelines",
+      "version": "1.0.0",
+      "category": "termination",
+      "text": "Vendor agreements must provide at least thirty (30) days' prior written notice before termination for convenience."
+    },
+    {
+      "policy_id": "pol-payment-1",
+      "name": "Vendor Payment Terms Standard",
+      "version": "1.0.0",
+      "category": "payment",
+      "text": "All vendor invoices must be paid within thirty (30) days of receipt."
+    },
+    {
+      "policy_id": "pol-data-protection-1",
+      "name": "Vendor Data Protection Requirement",
+      "version": "1.0.0",
+      "category": "data_protection",
+      "text": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach."
+    }
+  ],
+  "contracts": [
+    {
+      "contract_id": "acme-msa-v1",
+      "name": "Acme Master Services Agreement v1",
+      "text": "1. Limitation of Liability\nThe vendor's aggregate liability under this Agreement shall be unlimited for any direct or indirect damages.\n2. Termination\nCompany may terminate this Agreement for convenience with fifteen (15) days' prior written notice.\n3. Payment Terms\nCustomer shall pay all undisputed invoices within sixty (60) days of receipt.\n4. Confidentiality\nEach party shall protect the other party's confidential information using reasonable care.",
+      "clauses": [
+        {
+          "category": "liability",
+          "heading": "1. Limitation of Liability",
+          "text": "The vendor's aggregate liability under this Agreement shall be unlimited for any direct or indirect damages."
+        },
+        {
+          "category": "termination",
+          "heading": "2. Termination",
+          "text": "Company may terminate this Agreement for convenience with fifteen (15) days' prior written notice."
+        },
+        {
+          "category": "payment",
+          "heading": "3. Payment Terms",
+          "text": "Customer shall pay all undisputed invoices within sixty (60) days of receipt."
+        },
+        {
+          "category": "confidentiality",
+          "heading": "4. Confidentiality",
+          "text": "Each party shall protect the other party's confidential information using reasonable care."
+        }
+      ],
+      "ground_truth_findings": [
+        {
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_unlimited",
+          "severity": "critical",
+          "contract_quote": "The vendor's aggregate liability under this Agreement shall be unlimited for any direct or indirect damages.",
+          "policy_id": "pol-liability-1",
+          "policy_quote": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid under the agreement.",
+          "explanation": "The contract contains unlimited liability while policy requires a twelve-month fee cap."
+        },
+        {
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "high",
+          "contract_quote": "Company may terminate this Agreement for convenience with fifteen (15) days' prior written notice.",
+          "policy_id": "pol-termination-1",
+          "policy_quote": "Vendor agreements must provide at least thirty (30) days' prior written notice before termination for convenience.",
+          "explanation": "Termination notice is fifteen days while policy requires at least thirty."
+        },
+        {
+          "finding_type": "policy_deviation",
+          "risk_category": "payment",
+          "rule_id": "payment_period_exceeds_policy",
+          "severity": "medium",
+          "contract_quote": "Customer shall pay all undisputed invoices within sixty (60) days of receipt.",
+          "policy_id": "pol-payment-1",
+          "policy_quote": "All vendor invoices must be paid within thirty (30) days of receipt.",
+          "explanation": "Payment period is sixty days while policy requires payment within thirty."
+        },
+        {
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_id": "pol-data-protection-1",
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "explanation": "The active policy requires data protection coverage but no such clause was extracted."
+        }
+      ]
+    },
+    {
+      "contract_id": "beta-saas-v1",
+      "name": "Beta SaaS Agreement v1",
+      "text": "1. Limitation of Liability\nVendor's aggregate liability shall be limited to twenty-four (24) months of fees paid.\n2. Termination\nEither party may terminate for material breach with thirty (30) days' prior written notice.\n3. Payment Terms\nCustomer shall pay invoices within thirty (30) days.\n4. Governing Law\nThis Agreement is governed by the laws of Delaware.",
+      "clauses": [
+        {
+          "category": "liability",
+          "heading": "1. Limitation of Liability",
+          "text": "Vendor's aggregate liability shall be limited to twenty-four (24) months of fees paid."
+        },
+        {
+          "category": "termination",
+          "heading": "2. Termination",
+          "text": "Either party may terminate for material breach with thirty (30) days' prior written notice."
+        },
+        {
+          "category": "payment",
+          "heading": "3. Payment Terms",
+          "text": "Customer shall pay invoices within thirty (30) days."
+        },
+        {
+          "category": "governing_law",
+          "heading": "4. Governing Law",
+          "text": "This Agreement is governed by the laws of Delaware."
+        }
+      ],
+      "ground_truth_findings": [
+        {
+          "finding_type": "policy_deviation",
+          "risk_category": "liability",
+          "rule_id": "liability_cap_exceeds_policy",
+          "severity": "high",
+          "contract_quote": "Vendor's aggregate liability shall be limited to twenty-four (24) months of fees paid.",
+          "policy_id": "pol-liability-1",
+          "policy_quote": "Company requires all vendor contracts to cap aggregate liability at twelve (12) months of fees paid under the agreement.",
+          "explanation": "The contract cap is twenty-four months while policy requires no more than twelve."
+        },
+        {
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_id": "pol-data-protection-1",
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "explanation": "The active policy requires data protection coverage but no such clause was extracted."
+        }
+      ]
+    },
+    {
+      "contract_id": "gamma-nda-v1",
+      "name": "Gamma NDA v1",
+      "text": "1. Confidentiality\nThe vendor may disclose Confidential Information to subcontractors without prior written approval from the Company.\n2. Limitation of Liability\nNeither party's aggregate liability shall exceed the fees paid in the preceding twelve (12) months.\n3. Termination\nEither party may terminate for convenience upon ten (10) days' prior written notice.",
+      "clauses": [
+        {
+          "category": "confidentiality",
+          "heading": "1. Confidentiality",
+          "text": "The vendor may disclose Confidential Information to subcontractors without prior written approval from the Company."
+        },
+        {
+          "category": "liability",
+          "heading": "2. Limitation of Liability",
+          "text": "Neither party's aggregate liability shall exceed the fees paid in the preceding twelve (12) months."
+        },
+        {
+          "category": "termination",
+          "heading": "3. Termination",
+          "text": "Either party may terminate for convenience upon ten (10) days' prior written notice."
+        }
+      ],
+      "ground_truth_findings": [
+        {
+          "finding_type": "policy_deviation",
+          "risk_category": "termination",
+          "rule_id": "termination_notice_shortfall",
+          "severity": "high",
+          "contract_quote": "Either party may terminate for convenience upon ten (10) days' prior written notice.",
+          "policy_id": "pol-termination-1",
+          "policy_quote": "Vendor agreements must provide at least thirty (30) days' prior written notice before termination for convenience.",
+          "explanation": "Termination notice is ten days while policy requires at least thirty."
+        },
+        {
+          "finding_type": "missing_clause",
+          "risk_category": "data_protection",
+          "rule_id": "required_category_missing:data_protection",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_id": "pol-data-protection-1",
+          "policy_quote": "All vendor contracts must include data protection obligations for personal data, including prompt notice of any data breach.",
+          "explanation": "The active policy requires data protection coverage but no such clause was extracted."
+        },
+        {
+          "finding_type": "missing_clause",
+          "risk_category": "payment",
+          "rule_id": "required_category_missing:payment",
+          "severity": "high",
+          "contract_quote": null,
+          "policy_id": "pol-payment-1",
+          "policy_quote": "All vendor invoices must be paid within thirty (30) days of receipt.",
+          "explanation": "The active policy requires payment terms but no such clause was extracted."
+        }
+      ]
+    }
+  ]
+}

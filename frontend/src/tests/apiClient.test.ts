@@ -141,4 +141,46 @@ describe("ContractGuardApiClient", () => {
     expect(headers.get("X-Reviewer-ID")).toBe("local-reviewer");
     expect(headers.get("X-Workflow-Key")).toBe("dev-workflow-review-key");
   });
+
+  it("fetches the evaluation summary", async () => {
+    const payload = { available: false, reason: "not generated" };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => payload,
+    });
+
+    const result = await client.getEvaluationSummary();
+    expect(result.available).toBe(false);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/evaluation/summary",
+      expect.anything()
+    );
+  });
+
+  it("creates a version comparison with reviewer auth", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ comparison_id: "comparison-1" }),
+    });
+
+    await client.createComparison({
+      base_document_id: "doc-old",
+      target_document_id: "doc-new",
+      reanalyze_target: true,
+    });
+
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/comparisons");
+    expect((init as RequestInit).method).toBe("POST");
+    const headers = (init as RequestInit).headers as Headers;
+    expect(headers.get("X-Reviewer-ID")).toBe("local-reviewer");
+    expect(headers.get("X-Workflow-Key")).toBe("dev-workflow-review-key");
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({
+      base_document_id: "doc-old",
+      target_document_id: "doc-new",
+      reanalyze_target: true,
+    });
+  });
 });

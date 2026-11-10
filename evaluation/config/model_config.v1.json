@@ -1,0 +1,19 @@
+{
+  "version": "v1",
+  "mock": {
+    "baseline_model": "mock-single-llm-baseline",
+    "multi_agent_models": {
+      "clause_extraction": "mock-clause-extractor",
+      "policy_retrieval": "deterministic-category-retrieval",
+      "risk_rules": "policy-rule-engine",
+      "validation": "deterministic-evidence-validator"
+    },
+    "temperature": 0.0
+  },
+  "live": {
+    "provider": "gemini",
+    "default_model": "gemini-1.5-pro",
+    "temperature": 0.0,
+    "note": "Live evaluation requires GEMINI_API_KEY. It is optional and never runs in CI."
+  }
+}
